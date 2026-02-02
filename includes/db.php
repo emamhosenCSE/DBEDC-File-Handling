@@ -30,11 +30,8 @@ try {
         ]
     );
 } catch (PDOException $e) {
-    if (DEV_MODE) {
-        die("Database Connection Failed: " . $e->getMessage());
-    } else {
-        die("Database connection error. Please contact administrator.");
-    }
+    // Instead of dying, throw the exception so calling code can handle it
+    throw $e;
 }
 
 /**
