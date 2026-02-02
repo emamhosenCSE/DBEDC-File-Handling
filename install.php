@@ -6,6 +6,58 @@
 
 session_start();
 
+// Create config.php if it doesn't exist but database is configured
+if (!file_exists(__DIR__ . '/includes/config.php') && file_exists(__DIR__ . '/includes/db_config.php')) {
+    $configContent = "<?php
+/**
+ * Configuration File
+ * Contains sensitive configuration like OAuth credentials
+ * DO NOT commit this file to version control
+ */
+
+// Load database settings if available
+\$oauthSettings = [];
+\$pdo = null; // Initialize
+try {
+    if (file_exists(__DIR__ . '/db_config.php')) {
+        require_once __DIR__ . '/db_config.php';
+        require_once __DIR__ . '/db.php';
+        
+        if (\$pdo !== null) {
+            \$stmt = \$pdo->query(\"SELECT setting_key, setting_value FROM settings WHERE setting_group = 'auth'\");
+            \$oauthSettings = \$stmt->fetchAll(PDO::FETCH_KEY_PAIR);
+        }
+    }
+} catch (Exception \$e) {
+    // Database not ready yet
+}
+
+// Google OAuth Configuration
+define('GOOGLE_CLIENT_ID', \$oauthSettings['google_client_id'] ?? getenv('GOOGLE_CLIENT_ID') ?: 'your_google_client_id');
+define('GOOGLE_CLIENT_SECRET', \$oauthSettings['google_client_secret'] ?? getenv('GOOGLE_CLIENT_SECRET') ?: 'your_google_client_secret');
+define('GOOGLE_REDIRECT_URI', \$oauthSettings['google_redirect_uri'] ?? getenv('GOOGLE_REDIRECT_URI') ?: 'https://yourdomain.com/callback.php');
+
+// Database Configuration (if needed)
+if (!defined('DB_HOST')) {
+    define('DB_HOST', getenv('DB_HOST') ?: 'localhost');
+}
+if (!defined('DB_NAME')) {
+    define('DB_NAME', getenv('DB_NAME') ?: 'file_tracker');
+}
+if (!defined('DB_USER')) {
+    define('DB_USER', getenv('DB_USER') ?: 'root');
+}
+if (!defined('DB_PASS')) {
+    define('DB_PASS', getenv('DB_PASS') ?: '');
+}
+
+// Other settings
+define('APP_ENV', getenv('APP_ENV') ?: 'development');
+define('APP_DEBUG', getenv('APP_DEBUG') ?: true);
+?>";
+    file_put_contents(__DIR__ . '/includes/config.php', $configContent);
+}
+
 // Prevent access if already installed
 if (isset($_SESSION['user_id']) || (isset($_GET['check']) && isSystemInstalled())) {
     header('Location: dashboard.php');
@@ -22,7 +74,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 function isSystemInstalled() {
     try {
-        require_once __DIR__ . '/includes/config.php';
+        // Check if db_config.php exists (created during database setup)
+        if (!file_exists(__DIR__ . '/includes/db_config.php')) {
+            return false;
+        }
+
+        require_once __DIR__ . '/includes/db_config.php';
         require_once __DIR__ . '/includes/db.php';
         $stmt = $pdo->query("SELECT setting_value FROM settings WHERE setting_key = 'system_installed'");
         return $stmt->fetchColumn() === '1';
@@ -324,6 +381,60 @@ function handleFinalSetup() {
         
         // Mark system as installed
         $stmt->execute(['system_installed', '1', 'system']);
+        
+        // Create config.php file with OAuth settings
+        $configContent = file_get_contents(__DIR__ . '/includes/config.php.template');
+        if (!$configContent) {
+            // If template doesn't exist, create basic config.php
+            $configContent = "<?php
+/**
+ * Configuration File
+ * Contains sensitive configuration like OAuth credentials
+ * DO NOT commit this file to version control
+ */
+
+// Load database settings if available
+\$oauthSettings = [];
+\$pdo = null; // Initialize
+try {
+    if (file_exists(__DIR__ . '/db_config.php')) {
+        require_once __DIR__ . '/db_config.php';
+        require_once __DIR__ . '/db.php';
+        
+        if (\$pdo !== null) {
+            \$stmt = \$pdo->query(\"SELECT setting_key, setting_value FROM settings WHERE setting_group = 'auth'\");
+            \$oauthSettings = \$stmt->fetchAll(PDO::FETCH_KEY_PAIR);
+        }
+    }
+} catch (Exception \$e) {
+    // Database not ready yet
+}
+
+// Google OAuth Configuration
+define('GOOGLE_CLIENT_ID', \$oauthSettings['google_client_id'] ?? getenv('GOOGLE_CLIENT_ID') ?: 'your_google_client_id');
+define('GOOGLE_CLIENT_SECRET', \$oauthSettings['google_client_secret'] ?? getenv('GOOGLE_CLIENT_SECRET') ?: 'your_google_client_secret');
+define('GOOGLE_REDIRECT_URI', \$oauthSettings['google_redirect_uri'] ?? getenv('GOOGLE_REDIRECT_URI') ?: 'https://yourdomain.com/callback.php');
+
+// Database Configuration (if needed)
+if (!defined('DB_HOST')) {
+    define('DB_HOST', getenv('DB_HOST') ?: 'localhost');
+}
+if (!defined('DB_NAME')) {
+    define('DB_NAME', getenv('DB_NAME') ?: 'file_tracker');
+}
+if (!defined('DB_USER')) {
+    define('DB_USER', getenv('DB_USER') ?: 'root');
+}
+if (!defined('DB_PASS')) {
+    define('DB_PASS', getenv('DB_PASS') ?: '');
+}
+
+// Other settings
+define('APP_ENV', getenv('APP_ENV') ?: 'development');
+define('APP_DEBUG', getenv('APP_DEBUG') ?: true);
+?>";
+        }
+        file_put_contents(__DIR__ . '/includes/config.php', $configContent);
         
         // Create default stakeholders
         $stakeholders = [
