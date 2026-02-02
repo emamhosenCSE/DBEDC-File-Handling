@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>API Test</title>
+</head>
+<body>
+    <h1>Testing API Calls</h1>
+    <div id="results"></div>
+
+    <script>
+        // Simulate the App.request method with credentials
+        async function testAPI(endpoint) {
+            const response = await fetch(endpoint, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': 'test-token' // We'll use a test token
+                },
+                credentials: 'same-origin'
+            });
+
+            const contentType = response.headers.get('content-type');
+            let data;
+
+            if (contentType && contentType.includes('application/json')) {
+                data = await response.json();
+            } else {
+                data = await response.text();
+            }
+
+            return {
+                status: response.status,
+                contentType,
+                data
+            };
+        }
+
+        async function runTests() {
+            const results = document.getElementById('results');
+            const endpoints = ['/api/activities.php', '/api/analytics.php', '/api/letters.php', '/api/tasks.php'];
+
+            for (const endpoint of endpoints) {
+                try {
+                    const result = await testAPI(endpoint);
+                    results.innerHTML += `
+                        <h3>${endpoint}</h3>
+                        <p>Status: ${result.status}</p>
+                        <p>Content-Type: ${result.contentType}</p>
+                        <p>Data: <pre>${JSON.stringify(result.data, null, 2)}</pre></p>
+                        <hr>
+                    `;
+                } catch (error) {
+                    results.innerHTML += `
+                        <h3>${endpoint}</h3>
+                        <p>Error: ${error.message}</p>
+                        <hr>
+                    `;
+                }
+            }
+        }
+
+        // Run tests when page loads
+        runTests();
+    </script>
+</body>
+</html>

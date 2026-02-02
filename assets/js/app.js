@@ -311,6 +311,7 @@ const API = {
                 'X-CSRF-Token': App.csrfToken,
                 ...options.headers
             },
+            credentials: 'same-origin', // Include cookies for session
             ...options
         };
 
