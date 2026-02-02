@@ -69,7 +69,7 @@ function handleGet() {
     
     // Stakeholder filter (from letter)
     if (!empty($_GET['stakeholder']) && $_GET['stakeholder'] !== 'ALL') {
-        $filters[] = "l.stakeholder = ?";
+        $filters[] = "s.name = ?";
         $params[] = $_GET['stakeholder'];
     }
     
@@ -100,11 +100,12 @@ function handleGet() {
     if (!empty($_GET['id'])) {
         $stmt = $pdo->prepare("
             SELECT t.*, 
-                   l.reference_no, l.subject, l.stakeholder, l.priority, l.pdf_filename, l.tencent_doc_url,
+                   l.reference_no, l.subject, s.name as stakeholder, l.priority, l.pdf_filename, l.tencent_doc_url,
                    u1.name as assigned_to_name, u1.email as assigned_to_email,
                    u2.name as created_by_name
             FROM tasks t
             JOIN letters l ON t.letter_id = l.id
+            LEFT JOIN stakeholders s ON l.stakeholder_id = s.id
             LEFT JOIN users u1 ON t.assigned_to = u1.id
             LEFT JOIN users u2 ON t.created_by = u2.id
             WHERE t.id = ?
@@ -149,12 +150,13 @@ function handleGet() {
     // Get paginated results
     $sql = "
         SELECT t.*, 
-               l.reference_no, l.subject, l.stakeholder, l.priority,
+               l.reference_no, l.subject, s.name as stakeholder, l.priority,
                u1.name as assigned_to_name,
                u2.name as created_by_name,
                (SELECT COUNT(*) FROM task_updates WHERE task_id = t.id) as update_count
         FROM tasks t
         JOIN letters l ON t.letter_id = l.id
+        LEFT JOIN stakeholders s ON l.stakeholder_id = s.id
         LEFT JOIN users u1 ON t.assigned_to = u1.id
         LEFT JOIN users u2 ON t.created_by = u2.id
         $whereClause

@@ -142,11 +142,12 @@ function getStakeholderDistribution() {
     global $pdo;
     
     $stmt = $pdo->query("
-        SELECT l.stakeholder, COUNT(DISTINCT l.id) as letter_count, COUNT(t.id) as task_count
+        SELECT s.name as stakeholder, COUNT(DISTINCT l.id) as letter_count, COUNT(t.id) as task_count
         FROM letters l
+        LEFT JOIN stakeholders s ON l.stakeholder_id = s.id
         LEFT JOIN tasks t ON l.id = t.letter_id
         WHERE l.created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
-        GROUP BY l.stakeholder
+        GROUP BY s.name
         ORDER BY task_count DESC
     ");
     
