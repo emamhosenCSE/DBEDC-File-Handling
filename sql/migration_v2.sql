@@ -6,6 +6,7 @@
 -- ============================================
 -- DROP EXISTING TABLES (for clean reinstall)
 -- ============================================
+SET FOREIGN_KEY_CHECKS = 0;
 DROP TABLE IF EXISTS push_subscriptions;
 DROP TABLE IF EXISTS email_queue;
 DROP TABLE IF EXISTS user_preferences;
@@ -18,6 +19,7 @@ DROP TABLE IF EXISTS settings;
 DROP TABLE IF EXISTS stakeholders;
 DROP TABLE IF EXISTS users;
 DROP TABLE IF EXISTS departments;
+SET FOREIGN_KEY_CHECKS = 1;
 
 -- ============================================
 -- 1. DEPARTMENTS TABLE (Hierarchical)
@@ -440,6 +442,7 @@ GROUP BY l.id, l.reference_no, l.subject, l.received_date, l.priority, l.status,
 
 -- Procedure: Get unread notification count
 DELIMITER //
+DROP PROCEDURE IF EXISTS sp_get_unread_count;
 CREATE PROCEDURE sp_get_unread_count(IN p_user_id CHAR(26))
 BEGIN
     SELECT COUNT(*) as unread_count 
@@ -450,6 +453,7 @@ DELIMITER ;
 
 -- Procedure: Mark all notifications as read
 DELIMITER //
+DROP PROCEDURE IF EXISTS sp_mark_all_read;
 CREATE PROCEDURE sp_mark_all_read(IN p_user_id CHAR(26))
 BEGIN
     UPDATE notifications 
@@ -460,6 +464,7 @@ DELIMITER ;
 
 -- Procedure: Process email queue
 DELIMITER //
+DROP PROCEDURE IF EXISTS sp_get_pending_emails;
 CREATE PROCEDURE sp_get_pending_emails(IN p_limit INT)
 BEGIN
     SELECT * FROM email_queue 
@@ -477,6 +482,7 @@ DELIMITER ;
 
 -- Trigger: Auto-create user preferences on user insert
 DELIMITER //
+DROP TRIGGER IF EXISTS tr_user_after_insert;
 CREATE TRIGGER tr_user_after_insert
 AFTER INSERT ON users
 FOR EACH ROW
@@ -493,6 +499,7 @@ DELIMITER ;
 
 -- Trigger: Log activity on letter creation
 DELIMITER //
+DROP TRIGGER IF EXISTS tr_letter_after_insert;
 CREATE TRIGGER tr_letter_after_insert
 AFTER INSERT ON letters
 FOR EACH ROW
@@ -513,6 +520,7 @@ DELIMITER ;
 
 -- Trigger: Log activity on task status change
 DELIMITER //
+DROP TRIGGER IF EXISTS tr_task_after_update;
 CREATE TRIGGER tr_task_after_update
 AFTER UPDATE ON tasks
 FOR EACH ROW

@@ -17,21 +17,29 @@ if (file_exists(__DIR__ . '/db_config.php')) {
 // Development mode (set to false in production)
 define('DEV_MODE', true);
 
-try {
-    $pdo = new PDO(
-        "mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=utf8mb4",
-        DB_USER,
-        DB_PASS,
-        [
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            PDO::ATTR_EMULATE_PREPARES => false,
-            PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci"
-        ]
-    );
-} catch (PDOException $e) {
-    // Instead of dying, throw the exception so calling code can handle it
-    throw $e;
+// Only establish database connection if config exists (system is installed)
+if (file_exists(__DIR__ . '/db_config.php')) {
+    $pdo = null; // Initialize to null
+    try {
+        $pdo = new PDO(
+            "mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=utf8mb4",
+            DB_USER,
+            DB_PASS,
+            [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                PDO::ATTR_EMULATE_PREPARES => false,
+                PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci",
+                PDO::MYSQL_ATTR_USE_BUFFERED_QUERY => true
+            ]
+        );
+    } catch (PDOException $e) {
+        // Instead of dying, throw the exception so calling code can handle it
+        throw $e;
+    }
+} else {
+    // System not installed, $pdo remains null
+    $pdo = null;
 }
 
 /**

@@ -14,7 +14,10 @@
 require_once __DIR__ . '/includes/auth.php';
 ensureSystemInstalled();
 
-session_start();
+// Start session if not already started
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
 // Security Headers
 header("X-Frame-Options: DENY");
@@ -25,6 +28,7 @@ header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-i
 
 // Include configuration
 require_once __DIR__ . '/includes/config.php';
+require_once __DIR__ . '/includes/system-config.php';
 
 // Load branding if database is available
 $companyName = getSystemConfig('company_name', 'File Tracker');
@@ -34,11 +38,13 @@ $secondaryColor = getSystemConfig('secondary_color', '#764ba2');
 try {
     if (file_exists(__DIR__ . '/includes/db_config.php')) {
         require_once __DIR__ . '/includes/db.php';
-        $stmt = $pdo->query("SELECT setting_key, setting_value FROM settings WHERE setting_group = 'branding' AND is_public = TRUE");
-        $branding = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
-        $companyName = $branding['company_name'] ?? getSystemConfig('company_name', 'File Tracker');
-        $primaryColor = $branding['primary_color'] ?? getSystemConfig('primary_color', '#667eea');
-        $secondaryColor = $branding['secondary_color'] ?? getSystemConfig('secondary_color', '#764ba2');
+        if ($pdo !== null) {
+            $stmt = $pdo->query("SELECT setting_key, setting_value FROM settings WHERE setting_group = 'branding' AND is_public = TRUE");
+            $branding = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
+            $companyName = $branding['company_name'] ?? getSystemConfig('company_name', 'File Tracker');
+            $primaryColor = $branding['primary_color'] ?? getSystemConfig('primary_color', '#667eea');
+            $secondaryColor = $branding['secondary_color'] ?? getSystemConfig('secondary_color', '#764ba2');
+        }
     }
 } catch (Exception $e) {
     // Database not ready, use defaults

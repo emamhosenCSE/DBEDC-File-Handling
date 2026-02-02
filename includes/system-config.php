@@ -67,10 +67,9 @@ function getSystemConfig($key = null, $default = null) {
         ];
 
         // Load from database settings
-        global $dbAvailable;
-        if ($dbAvailable) {
+        global $dbAvailable, $pdo;
+        if ($dbAvailable && $pdo !== null) {
             try {
-                global $pdo;
                 $stmt = $pdo->query("SELECT setting_key, setting_value FROM settings WHERE setting_group IN ('branding', 'email', 'workflow', 'system')");
                 $settings = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
 
