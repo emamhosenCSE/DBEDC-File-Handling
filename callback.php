@@ -9,9 +9,9 @@ require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/auth.php';
 
 // UPDATE THESE WITH YOUR GOOGLE OAUTH CREDENTIALS (same as login.php)
-define('GOOGLE_CLIENT_ID', 'YOUR_CLIENT_ID.apps.googleusercontent.com');
-define('GOOGLE_CLIENT_SECRET', 'YOUR_CLIENT_SECRET');
-define('GOOGLE_REDIRECT_URI', 'https://yourdomain.com/file-tracker/callback.php');
+define('GOOGLE_CLIENT_ID', '551140686722-ngg3290imab1ru0slcljlourvuvrd7t5.apps.googleusercontent.com');
+define('GOOGLE_CLIENT_SECRET', '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');
+define('GOOGLE_REDIRECT_URI', 'https://files.dhakabypass.com/callback.php');
 
 // Error handling
 if (isset($_GET['error'])) {

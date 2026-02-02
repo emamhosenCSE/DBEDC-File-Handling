@@ -28,7 +28,7 @@ A comprehensive web-based file and task tracking system built with vanilla PHP, 
 3. Upload the `file-tracker` folder to `/public_html/`
 4. Your structure should look like:
    ```
-   /public_html/file-tracker/
+   /public_html/
    ├── api/
    ├── assets/
    ├── includes/
@@ -82,7 +82,7 @@ A comprehensive web-based file and task tracking system built with vanilla PHP, 
 6. Create OAuth 2.0 Client ID:
    - Application type: Web application
    - Name: File Tracker
-   - Authorized redirect URIs: `https://yourdomain.com/file-tracker/callback.php`
+   - Authorized redirect URIs: `https://yourdomain.com/callback.php`
 7. Copy the **Client ID** and **Client Secret**
 
 ### Step 5: Configure OAuth Credentials
@@ -92,7 +92,7 @@ A comprehensive web-based file and task tracking system built with vanilla PHP, 
    ```php
    define('GOOGLE_CLIENT_ID', 'YOUR_CLIENT_ID.apps.googleusercontent.com');
    define('GOOGLE_CLIENT_SECRET', 'YOUR_CLIENT_SECRET');
-   define('GOOGLE_REDIRECT_URI', 'https://yourdomain.com/file-tracker/callback.php');
+   define('GOOGLE_REDIRECT_URI', 'https://yourdomain.com/callback.php');
    ```
 
 3. Open `callback.php`
@@ -101,16 +101,16 @@ A comprehensive web-based file and task tracking system built with vanilla PHP, 
 ### Step 6: Set File Permissions
 
 ```bash
-chmod 755 /public_html/file-tracker
-chmod 755 /public_html/file-tracker/assets
-chmod 777 /public_html/file-tracker/assets/uploads
-chmod 644 /public_html/file-tracker/*.php
-chmod 644 /public_html/file-tracker/.htaccess
+chmod 755 /public_html
+chmod 755 /public_html/assets
+chmod 777 /public_html/assets/uploads
+chmod 644 /public_html/*.php
+chmod 644 /public_html/.htaccess
 ```
 
 ### Step 7: Test Installation
 
-1. Visit `https://yourdomain.com/file-tracker/`
+1. Visit `https://yourdomain.com/`
 2. You should see the login page
 3. Click **Sign in with Google**
 4. Grant permissions

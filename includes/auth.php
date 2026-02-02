@@ -19,7 +19,7 @@ function ensureAuthenticated() {
         if (isAjaxRequest()) {
             jsonError('Unauthorized', 401);
         } else {
-            header('Location: /file-tracker/login.php');
+            header('Location: /login.php');
             exit;
         }
     }
@@ -93,7 +93,7 @@ function logout() {
     }
     
     session_destroy();
-    header('Location: /file-tracker/login.php');
+    header('Location: /login.php');
     exit;
 }
 

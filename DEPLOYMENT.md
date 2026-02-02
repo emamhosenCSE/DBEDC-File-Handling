@@ -6,7 +6,7 @@
 - [ ] Create Google Cloud project
 - [ ] Enable Google+ API
 - [ ] Create OAuth 2.0 credentials
-- [ ] Add authorized redirect URI: `https://yourdomain.com/file-tracker/callback.php`
+- [ ] Add authorized redirect URI: `https://yourdomain.com/callback.php`
 - [ ] Copy Client ID and Client Secret
 
 ### 2. Hosting Preparation
@@ -27,7 +27,7 @@
 
 ### 1. Upload Files (via FTP or cPanel File Manager)
 ```
-/public_html/file-tracker/
+/public_html/
 ├── api/
 │   ├── letters.php
 │   ├── tasks.php
@@ -77,7 +77,7 @@ chmod 644 file-tracker/includes/*.php
 - [ ] Update `.htaccess` to force HTTPS
 
 ### 5. Test Installation
-- [ ] Visit `https://yourdomain.com/file-tracker/`
+- [ ] Visit `https://yourdomain.com/`
 - [ ] Test login with Google
 - [ ] Create a test letter
 - [ ] Create a test task

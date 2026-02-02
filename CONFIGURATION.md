@@ -26,7 +26,7 @@ Database Password: _________________
 ```
 Client ID:         __________________________________________.apps.googleusercontent.com
 Client Secret:     __________________________________________
-Redirect URI:      https://yourdomain.com/file-tracker/callback.php
+Redirect URI:      https://yourdomain.com/callback.php
 ```
 
 **To update in:** `login.php` AND `callback.php`
@@ -37,8 +37,8 @@ Redirect URI:      https://yourdomain.com/file-tracker/callback.php
 
 ```
 Your Domain:       https://______________________.com
-Installation Path: /public_html/file-tracker/
-Full URL:          https://______________________.com/file-tracker/
+Installation Path: /public_html/
+Full URL:          https://______________________.com/
 ```
 
 ---

@@ -7,7 +7,7 @@
  * 2. Create a new project or select existing
  * 3. Enable Google+ API
  * 4. Create OAuth 2.0 credentials
- * 5. Add authorized redirect URI: https://yourdomain.com/file-tracker/callback.php
+ * 5. Add authorized redirect URI: https://yourdomain.com/callback.php
  * 6. Download JSON and add credentials below
  */
 
@@ -20,9 +20,9 @@ if (isset($_SESSION['user_id'])) {
 }
 
 // UPDATE THESE WITH YOUR GOOGLE OAUTH CREDENTIALS
-define('GOOGLE_CLIENT_ID', 'YOUR_CLIENT_ID.apps.googleusercontent.com');
-define('GOOGLE_CLIENT_SECRET', 'YOUR_CLIENT_SECRET');
-define('GOOGLE_REDIRECT_URI', 'https://yourdomain.com/file-tracker/callback.php');
+define('GOOGLE_CLIENT_ID', '551140686722-ngg3290imab1ru0slcljlourvuvrd7t5.apps.googleusercontent.com');
+define('GOOGLE_CLIENT_SECRET', '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');
+define('GOOGLE_REDIRECT_URI', 'https://files.dhakabypass.com/callback.php');
 
 // Generate state token for security
 $_SESSION['oauth_state'] = bin2hex(random_bytes(16));

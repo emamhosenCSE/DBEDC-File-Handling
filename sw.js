@@ -1,14 +1,17 @@
 /**
- * Service Worker for File Tracker PWA
- * Enables offline functionality and caching
+ * Service Worker for DBEDC File Tracker PWA v2.0
+ * Enables offline functionality, caching, and push notifications
  */
 
-const CACHE_NAME = 'file-tracker-v1.0';
+const CACHE_NAME = 'file-tracker-v2.0';
 const urlsToCache = [
-    '/file-tracker/dashboard.php',
-    '/file-tracker/assets/css/app.css',
-    '/file-tracker/assets/js/app.js',
-    '/file-tracker/login.php'
+    '/dashboard.php',
+    '/assets/css/app.css',
+    '/assets/js/app.js',
+    '/login.php',
+    '/manifest.json',
+    '/assets/icon-192.png',
+    '/assets/icon-512.png'
 ];
 
 // Install event - cache resources
@@ -16,9 +19,10 @@ self.addEventListener('install', event => {
     event.waitUntil(
         caches.open(CACHE_NAME)
             .then(cache => {
-                console.log('Opened cache');
+                console.log('Opened cache v2.0');
                 return cache.addAll(urlsToCache);
             })
+            .then(() => self.skipWaiting())
     );
 });
 
@@ -34,7 +38,7 @@ self.addEventListener('activate', event => {
                     }
                 })
             );
-        })
+        }).then(() => self.clients.claim())
     );
 });
 
@@ -45,11 +49,26 @@ self.addEventListener('fetch', event => {
         return;
     }
     
+    // Skip cross-origin requests
+    if (!event.request.url.startsWith(self.location.origin)) {
+        return;
+    }
+    
     event.respondWith(
         caches.match(event.request)
             .then(response => {
                 // Cache hit - return response
                 if (response) {
+                    // Return cached response but also update cache in background
+                    event.waitUntil(
+                        fetch(event.request).then(res => {
+                            if (res && res.status === 200) {
+                                caches.open(CACHE_NAME).then(cache => {
+                                    cache.put(event.request, res);
+                                });
+                            }
+                        }).catch(() => {})
+                    );
                     return response;
                 }
                 
@@ -76,21 +95,52 @@ self.addEventListener('fetch', event => {
             })
             .catch(() => {
                 // Return offline page if available
-                return caches.match('/file-tracker/dashboard.php');
+                return caches.match('/dashboard.php');
             })
     );
 });
 
-// Push notification event (for future implementation)
+// Push notification event
 self.addEventListener('push', event => {
-    const data = event.data ? event.data.json() : {};
-    const title = data.title || 'File Tracker';
+    let data = {};
+    
+    if (event.data) {
+        try {
+            data = event.data.json();
+        } catch (e) {
+            data.body = event.data.text();
+        }
+    }
+    
+    const title = data.title || 'File Tracker Notification';
     const options = {
         body: data.body || 'You have a new notification',
-        icon: '/file-tracker/assets/icon-192.png',
-        badge: '/file-tracker/assets/icon-192.png',
-        data: data.url || '/file-tracker/dashboard.php'
+        icon: '/assets/icon-192.png',
+        badge: '/assets/icon-192.png',
+        vibrate: [100, 50, 100],
+        data: {
+            url: data.url || '/dashboard.php',
+            type: data.type || 'general',
+            id: data.id || null
+        },
+        actions: [
+            {
+                action: 'open',
+                title: 'Open'
+            },
+            {
+                action: 'dismiss',
+                title: 'Dismiss'
+            }
+        ],
+        tag: data.tag || 'file-tracker-notification',
+        renotify: true
     };
+    
+    // Add image if provided
+    if (data.image) {
+        options.image = data.image;
+    }
     
     event.waitUntil(
         self.registration.showNotification(title, options)
@@ -101,7 +151,51 @@ self.addEventListener('push', event => {
 self.addEventListener('notificationclick', event => {
     event.notification.close();
     
+    if (event.action === 'dismiss') {
+        return;
+    }
+    
+    const urlToOpen = event.notification.data?.url || '/dashboard.php';
+    
     event.waitUntil(
-        clients.openWindow(event.notification.data)
+        clients.matchAll({ type: 'window', includeUncontrolled: true })
+            .then(clientList => {
+                // Check if there's already a window open
+                for (const client of clientList) {
+                    if (client.url.includes('/dashboard.php') && 'focus' in client) {
+                        client.focus();
+                        client.postMessage({
+                            type: 'NOTIFICATION_CLICK',
+                            data: event.notification.data
+                        });
+                        return;
+                    }
+                }
+                
+                // Open new window
+                if (clients.openWindow) {
+                    return clients.openWindow(urlToOpen);
+                }
+            })
     );
 });
+
+// Notification close event
+self.addEventListener('notificationclose', event => {
+    // Log notification closed for analytics
+    if (event.notification.tag) {
+        console.log('Notification closed:', event.notification.tag);
+    }
+});
+
+// Background sync for offline actions (future implementation)
+self.addEventListener('sync', event => {
+    if (event.tag === 'sync-tasks') {
+        event.waitUntil(syncTasks());
+    }
+});
+
+async function syncTasks() {
+    // Placeholder for offline sync functionality
+    console.log('Background sync triggered');
+}

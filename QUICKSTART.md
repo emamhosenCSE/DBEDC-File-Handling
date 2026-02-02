@@ -5,7 +5,7 @@
 ### Step 1: Upload Files (2 minutes)
 1. Download the entire `file-tracker` folder
 2. Upload to `/public_html/` on your Namecheap hosting via FTP
-3. Your URL will be: `https://yourdomain.com/file-tracker/`
+3. Your URL will be: `https://yourdomain.com/`
 
 ### Step 2: Database Setup (1 minute)
 1. Go to cPanel → MySQL Databases
@@ -28,14 +28,14 @@ define('DEV_MODE', false);                  // Set to false for production
 1. Visit: https://console.cloud.google.com
 2. Create project → APIs & Services → Credentials
 3. Create OAuth 2.0 Client ID
-4. Add redirect: `https://yourdomain.com/file-tracker/callback.php`
+4. Add redirect: `https://yourdomain.com/callback.php`
 5. Copy Client ID and Secret
 
 **Edit `login.php` AND `callback.php`:**
 ```php
 define('GOOGLE_CLIENT_ID', 'paste-your-client-id-here');
 define('GOOGLE_CLIENT_SECRET', 'paste-your-secret-here');
-define('GOOGLE_REDIRECT_URI', 'https://yourdomain.com/file-tracker/callback.php');
+define('GOOGLE_REDIRECT_URI', 'https://yourdomain.com/callback.php');
 ```
 
 ### Step 4: Set Permissions
@@ -45,7 +45,7 @@ Right-click assets/uploads → Change Permissions → 777
 ```
 
 ### Step 5: Test!
-1. Visit `https://yourdomain.com/file-tracker/`
+1. Visit `https://yourdomain.com/`
 2. Click "Sign in with Google"
 3. You're in! 🎉
 

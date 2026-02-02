@@ -1,19 +1,30 @@
 /**
- * File Tracker - Main Application JavaScript
+ * DBEDC File Tracker - Main Application JavaScript v2.0
  * Vanilla JS SPA with API integration
+ * Enhanced with Letters, Departments, Users, Settings, Notifications tabs
  */
 
 // ===== GLOBAL STATE =====
 const App = {
-    currentView: 'my-tasks',
+    currentView: 'dashboard',
     currentUser: window.USER_DATA,
     csrfToken: window.CSRF_TOKEN,
+    stakeholders: window.STAKEHOLDERS || [],
+    departments: window.DEPARTMENTS || [],
     filters: {
         search: '',
         status: 'ALL',
         stakeholder: 'ALL',
-        priority: 'ALL'
-    }
+        priority: 'ALL',
+        department: 'ALL',
+        dateFrom: '',
+        dateTo: ''
+    },
+    viewMode: 'table', // table or grid
+    currentPage: 1,
+    perPage: 25,
+    totalPages: 1,
+    selectedItems: []
 };
 
 // ===== API HELPER =====
@@ -80,13 +91,39 @@ const API = {
 
 // ===== ROUTING & VIEWS =====
 function switchTab(view) {
+    // Check permission
+    if (!canAccessView(view)) {
+        showToast('You do not have permission to access this section', 'error');
+        return;
+    }
+    
     // Update UI
     document.querySelectorAll('.tab').forEach(tab => {
         tab.classList.toggle('active', tab.dataset.view === view);
     });
     
     App.currentView = view;
+    App.selectedItems = [];
+    App.currentPage = 1;
     loadView(view);
+}
+
+function canAccessView(view) {
+    const userRole = App.currentUser.role;
+    
+    const permissions = {
+        'dashboard': true,
+        'letters': true,
+        'my-tasks': true,
+        'all-tasks': ['ADMIN', 'MANAGER'].includes(userRole),
+        'departments': ['ADMIN', 'MANAGER'].includes(userRole),
+        'users': userRole === 'ADMIN',
+        'analytics': true,
+        'settings': userRole === 'ADMIN',
+        'notifications': true
+    };
+    
+    return permissions[view] || false;
 }
 
 async function loadView(view) {
@@ -95,17 +132,32 @@ async function loadView(view) {
     
     try {
         switch(view) {
+            case 'dashboard':
+                await renderDashboard();
+                break;
+            case 'letters':
+                await renderLetters();
+                break;
             case 'my-tasks':
                 await renderMyTasks();
                 break;
             case 'all-tasks':
                 await renderAllTasks();
                 break;
-            case 'add-letter':
-                renderAddLetter();
+            case 'departments':
+                await renderDepartments();
+                break;
+            case 'users':
+                await renderUsers();
                 break;
             case 'analytics':
                 await renderAnalytics();
+                break;
+            case 'settings':
+                await renderSettings();
+                break;
+            case 'notifications':
+                await renderNotifications();
                 break;
             default:
                 content.innerHTML = '<p>View not found</p>';
@@ -115,327 +167,807 @@ async function loadView(view) {
     }
 }
 
-// ===== MY TASKS VIEW =====
-async function renderMyTasks() {
-    const response = await API.get(`api/tasks.php?view=my&status=${App.filters.status}&search=${App.filters.search}`);
-    const tasks = response.tasks;
+// ===== DASHBOARD VIEW =====
+async function renderDashboard() {
+    const [stats, recentLetters, myTasks, activities, calendarData] = await Promise.all([
+        API.get('api/analytics.php?type=overview'),
+        API.get('api/letters.php?limit=5'),
+        API.get('api/tasks.php?view=my&status=PENDING&limit=5'),
+        API.get('api/activities.php?limit=10'),
+        API.get('api/letters.php?calendar=true')
+    ]);
+    
+    const urgentTasks = myTasks.tasks?.filter(t => t.priority === 'URGENT' || t.priority === 'HIGH') || [];
     
     const html = `
-        <div class="card">
-            <div class="card-header">
-                <h2 class="card-title">My Tasks</h2>
-                <button class="btn btn-primary btn-sm" onclick="refreshCurrentView()">
-                    <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/>
-                    </svg>
-                    Refresh
-                </button>
-            </div>
-            
-            <div class="filters-bar">
-                <div class="filter-group">
-                    <input type="text" 
-                           class="form-input" 
-                           placeholder="Search tasks..." 
-                           onchange="App.filters.search = this.value; refreshCurrentView()">
-                </div>
-                <div class="filter-group">
-                    <select class="form-select" onchange="App.filters.status = this.value; refreshCurrentView()">
-                        <option value="ALL">All Status</option>
-                        <option value="PENDING">Pending</option>
-                        <option value="IN_PROGRESS">In Progress</option>
-                        <option value="COMPLETED">Completed</option>
-                    </select>
-                </div>
-            </div>
-            
-            ${tasks.length === 0 ? 
-                '<p class="text-center" style="padding: 2rem; color: var(--gray-500);">No tasks assigned to you</p>' :
-                renderTaskTable(tasks)
-            }
-        </div>
-    `;
-    
-    document.getElementById('app-content').innerHTML = html;
-}
-
-// ===== ALL TASKS VIEW =====
-async function renderAllTasks() {
-    const response = await API.get(`api/tasks.php?view=all&status=${App.filters.status}&stakeholder=${App.filters.stakeholder}&search=${App.filters.search}`);
-    const tasks = response.tasks;
-    
-    const html = `
-        <div class="card">
-            <div class="card-header">
-                <h2 class="card-title">All Tasks</h2>
-                <button class="btn btn-primary btn-sm" onclick="refreshCurrentView()">
-                    <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/>
-                    </svg>
-                    Refresh
-                </button>
-            </div>
-            
-            <div class="filters-bar">
-                <div class="filter-group">
-                    <input type="text" 
-                           class="form-input" 
-                           placeholder="Search tasks..." 
-                           onchange="App.filters.search = this.value; refreshCurrentView()">
-                </div>
-                <div class="filter-group">
-                    <select class="form-select" onchange="App.filters.status = this.value; refreshCurrentView()">
-                        <option value="ALL">All Status</option>
-                        <option value="PENDING">Pending</option>
-                        <option value="IN_PROGRESS">In Progress</option>
-                        <option value="COMPLETED">Completed</option>
-                    </select>
-                </div>
-                <div class="filter-group">
-                    <select class="form-select" onchange="App.filters.stakeholder = this.value; refreshCurrentView()">
-                        <option value="ALL">All Stakeholders</option>
-                        <option value="IE">IE</option>
-                        <option value="JV">JV</option>
-                        <option value="RHD">RHD</option>
-                        <option value="ED">ED</option>
-                        <option value="OTHER">OTHER</option>
-                    </select>
-                </div>
-            </div>
-            
-            ${tasks.length === 0 ? 
-                '<p class="text-center" style="padding: 2rem; color: var(--gray-500);">No tasks found</p>' :
-                renderTaskTable(tasks)
-            }
-        </div>
-    `;
-    
-    document.getElementById('app-content').innerHTML = html;
-}
-
-// ===== RENDER TASK TABLE =====
-function renderTaskTable(tasks) {
-    return `
-        <div class="table-container">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Reference</th>
-                        <th>Task</th>
-                        <th>Stakeholder</th>
-                        <th>Priority</th>
-                        <th>Status</th>
-                        <th>Assigned To</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${tasks.map(task => `
-                        <tr>
-                            <td>
-                                <strong>${task.reference_no}</strong><br>
-                                <small style="color: var(--gray-500);">${task.subject.substring(0, 50)}...</small>
-                            </td>
-                            <td>${task.title}</td>
-                            <td><span class="badge ${task.stakeholder}">${task.stakeholder}</span></td>
-                            <td><span class="badge ${task.priority}">${task.priority}</span></td>
-                            <td><span class="badge ${task.status}">${task.status.replace('_', ' ')}</span></td>
-                            <td>${task.assigned_to_name || task.assigned_group || '-'}</td>
-                            <td>
-                                <button class="btn btn-secondary btn-sm" onclick="viewTaskDetail('${task.id}')">View</button>
-                                <button class="btn btn-primary btn-sm" onclick="updateTaskStatus('${task.id}', '${task.status}')">Update</button>
-                            </td>
-                        </tr>
-                    `).join('')}
-                </tbody>
-            </table>
-        </div>
-    `;
-}
-
-// ===== ADD LETTER VIEW =====
-function renderAddLetter() {
-    const html = `
-        <div class="card">
-            <div class="card-header">
-                <h2 class="card-title">Add New Letter</h2>
-            </div>
-            
-            <form id="add-letter-form" onsubmit="handleLetterSubmit(event)">
-                <div class="form-group">
-                    <label class="form-label">Reference Number *</label>
-                    <input type="text" name="reference_no" class="form-input" placeholder="ICT-862-SKP-593" required>
-                </div>
-                
-                <div class="form-group">
-                    <label class="form-label">Stakeholder *</label>
-                    <select name="stakeholder" class="form-select" required>
-                        <option value="">Select stakeholder</option>
-                        <option value="IE">IE</option>
-                        <option value="JV">JV</option>
-                        <option value="RHD">RHD</option>
-                        <option value="ED">ED</option>
-                        <option value="OTHER">OTHER</option>
-                    </select>
-                </div>
-                
-                <div class="form-group">
-                    <label class="form-label">Subject *</label>
-                    <textarea name="subject" class="form-textarea" placeholder="Enter letter subject..." required></textarea>
-                </div>
-                
-                <div class="form-group">
-                    <label class="form-label">Upload PDF *</label>
-                    <input type="file" name="pdf" class="form-file" accept=".pdf" required>
-                </div>
-                
-                <div class="form-group">
-                    <label class="form-label">TenCent Docs Link</label>
-                    <input type="url" name="tencent_doc_url" class="form-input" placeholder="https://docs.qq.com/doc/...">
-                </div>
-                
-                <div class="form-group">
-                    <label class="form-label">Received Date *</label>
-                    <input type="date" name="received_date" class="form-input" required>
-                </div>
-                
-                <div class="form-group">
-                    <label class="form-label">Priority</label>
-                    <select name="priority" class="form-select">
-                        <option value="MEDIUM">Medium</option>
-                        <option value="LOW">Low</option>
-                        <option value="HIGH">High</option>
-                        <option value="URGENT">Urgent</option>
-                    </select>
-                </div>
-                
-                <div class="form-group">
-                    <button type="submit" class="btn btn-primary">
-                        <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clip-rule="evenodd"/>
+        <div class="dashboard">
+            <!-- Stats Cards -->
+            <div class="stats-grid">
+                <div class="stat-card" onclick="switchTab('letters')">
+                    <div class="stat-icon" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                        <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clip-rule="evenodd"/>
                         </svg>
-                        Add Letter
-                    </button>
-                    <button type="button" class="btn btn-secondary" onclick="document.getElementById('add-letter-form').reset()">Clear</button>
+                    </div>
+                    <div class="stat-value">${stats.letters?.total || 0}</div>
+                    <div class="stat-label">Total Letters</div>
                 </div>
-            </form>
-        </div>
-        
-        <div id="task-creation-section" style="display: none;" class="card mt-lg">
-            <div class="card-header">
-                <h2 class="card-title">Create Tasks for This Letter</h2>
+                
+                <div class="stat-card" onclick="switchTab('my-tasks')">
+                    <div class="stat-icon" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                        <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/>
+                            <path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 011-1h4a1 1 0 110 2H8a1 1 0 01-1-1z" clip-rule="evenodd"/>
+                        </svg>
+                    </div>
+                    <div class="stat-value">${stats.tasks?.pending || 0}</div>
+                    <div class="stat-label">Pending Tasks</div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                        <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/>
+                        </svg>
+                    </div>
+                    <div class="stat-value">${stats.avg_completion_days || '-'}</div>
+                    <div class="stat-label">Avg. Completion (days)</div>
+                </div>
+                
+                <div class="stat-card" style="cursor: default;">
+                    <div class="stat-icon urgent" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">
+                        <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                        </svg>
+                    </div>
+                    <div class="stat-value">${urgentTasks.length}</div>
+                    <div class="stat-label">Urgent Tasks</div>
+                </div>
             </div>
-            <div id="task-forms"></div>
-            <button class="btn btn-secondary btn-sm" onclick="addTaskForm()">
-                <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clip-rule="evenodd"/>
-                </svg>
-                Add Another Task
+            
+            <!-- Quick Actions -->
+            <div class="quick-actions">
+                <h3>Quick Actions</h3>
+                <div class="quick-actions-grid">
+                    <button class="quick-action-btn" onclick="showAddLetterModal()">
+                        <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/>
+                        </svg>
+                        <span>Add Letter</span>
+                    </button>
+                    <button class="quick-action-btn" onclick="switchTab('letters'); App.viewMode = 'grid'; refreshCurrentView();">
+                        <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M2 4a1 1 0 011-1h5a1 1 0 011 1v12a1 1 0 01-1 1H3a1 1 0 01-1-1V4zM8 7a1 1 0 011-1h9a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7z"/>
+                            <path d="M14 4a1 1 0 011-1h3a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1V4z"/>
+                        </svg>
+                        <span>Grid View</span>
+                    </button>
+                    <button class="quick-action-btn" onclick="showBulkImportModal()">
+                        <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
+                        </svg>
+                        <span>Bulk Import</span>
+                    </button>
+                    <button class="quick-action-btn" onclick="exportLetters()">
+                        <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                        </svg>
+                        <span>Export Data</span>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Main Dashboard Grid -->
+            <div class="dashboard-grid">
+                <!-- Recent Letters -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Recent Letters</h3>
+                        <button class="btn btn-secondary btn-sm" onclick="switchTab('letters')">View All</button>
+                    </div>
+                    <div class="card-body">
+                        ${renderRecentItemsList(recentLetters.letters || [], 'letter')}
+                    </div>
+                </div>
+                
+                <!-- My Pending Tasks -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">My Pending Tasks</h3>
+                        <button class="btn btn-secondary btn-sm" onclick="switchTab('my-tasks')">View All</button>
+                    </div>
+                    <div class="card-body">
+                        ${renderTaskList(myTasks.tasks || [])}
+                    </div>
+                </div>
+                
+                <!-- Calendar Preview -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Calendar</h3>
+                    </div>
+                    <div class="card-body">
+                        ${renderMiniCalendar(calendarData)}
+                    </div>
+                </div>
+                
+                <!-- Activity Timeline -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Recent Activity</h3>
+                        <button class="btn btn-secondary btn-sm" onclick="switchTab('notifications')">View All</button>
+                    </div>
+                    <div class="card-body">
+                        ${renderActivityTimeline(activities.activities || [])}
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.getElementById('app-content').innerHTML = html;
+}
+
+function renderRecentItemsList(items, type) {
+    if (items.length === 0) {
+        return '<p class="text-center text-muted">No recent items</p>';
+    }
+    
+    return `
+        <div class="recent-list">
+            ${items.slice(0, 5).map(item => `
+                <div class="recent-item" onclick="view${type.charAt(0).toUpperCase() + type.slice(1)}Detail('${item.id}')">
+                    <div class="recent-item-icon">
+                        <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clip-rule="evenodd"/>
+                        </svg>
+                    </div>
+                    <div class="recent-item-content">
+                        <div class="recent-item-title">${item.reference_no}</div>
+                        <div class="recent-item-subtitle">${item.subject || item.title}</div>
+                        <div class="recent-item-meta">
+                            <span class="badge ${item.stakeholder}">${item.stakeholder}</span>
+                            <span class="text-muted">${formatDate(item.created_at || item.received_date)}</span>
+                        </div>
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+function renderTaskList(tasks) {
+    if (tasks.length === 0) {
+        return '<p class="text-center text-muted">No pending tasks</p>';
+    }
+    
+    return `
+        <div class="task-list">
+            ${tasks.slice(0, 5).map(task => `
+                <div class="task-item" onclick="viewTaskDetail('${task.id}')">
+                    <div class="task-item-priority">
+                        <span class="priority-dot ${task.priority?.toLowerCase()}"></span>
+                    </div>
+                    <div class="task-item-content">
+                        <div class="task-item-title">${task.title || task.subject}</div>
+                        <div class="task-item-meta">
+                            <span>${task.reference_no}</span>
+                            <span class="text-muted">Due: ${formatDate(task.due_date)}</span>
+                        </div>
+                    </div>
+                    <span class="badge ${task.status}">${task.status?.replace('_', ' ')}</span>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+function renderMiniCalendar(calendarData) {
+    const now = new Date();
+    const currentMonth = now.toLocaleString('default', { month: 'short', year: 'numeric' });
+    
+    // Generate days for current month
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const today = now.getDate();
+    
+    const lettersByDay = {};
+    (calendarData.letters || []).forEach(letter => {
+        const day = new Date(letter.received_date).getDate();
+        if (!lettersByDay[day]) lettersByDay[day] = [];
+        lettersByDay[day].push(letter);
+    });
+    
+    return `
+        <div class="mini-calendar">
+            <div class="mini-calendar-header">${currentMonth}</div>
+            <div class="mini-calendar-grid">
+                ${Array.from({ length: daysInMonth }, (_, i) => {
+                    const day = i + 1;
+                    const hasLetters = lettersByDay[day];
+                    return `
+                        <div class="mini-calendar-day ${day === today ? 'today' : ''} ${hasLetters ? 'has-events' : ''}" title="${hasLetters?.length || 0} letters">
+                            ${day}
+                            ${hasLetters ? '<span class="event-dot"></span>' : ''}
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        </div>
+    `;
+}
+
+function renderActivityTimeline(activities) {
+    if (activities.length === 0) {
+        return '<p class="text-center text-muted">No recent activity</p>';
+    }
+    
+    return `
+        <div class="activity-timeline">
+            ${activities.slice(0, 8).map(activity => `
+                <div class="activity-item">
+                    <div class="activity-icon ${activity.type}">
+                        ${getActivityIcon(activity.type)}
+                    </div>
+                    <div class="activity-content">
+                        <div class="activity-text">${activity.description}</div>
+                        <div class="activity-meta">
+                            <span>${activity.user_name}</span>
+                            <span>${formatTimeAgo(activity.created_at)}</span>
+                        </div>
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+function getActivityIcon(type) {
+    const icons = {
+        'letter': '<svg width="12" height="12" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clip-rule="evenodd"/></svg>',
+        'task': '<svg width="12" height="12" fill="currentColor" viewBox="0 0 20 20"><path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/><path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5z"/></svg>',
+        'status': '<svg width="12" height="12" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>',
+        'comment': '<svg width="12" height="12" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z"/></svg>',
+        'user': '<svg width="12" height="12" fill="currentColor" viewBox="0 0 20 20"><path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z"/></svg>'
+    };
+    return icons[type] || icons.letter;
+}
+
+// ===== LETTERS VIEW =====
+async function renderLetters() {
+    const params = new URLSearchParams({
+        page: App.currentPage,
+        per_page: App.perPage,
+        search: App.filters.search,
+        status: App.filters.status,
+        stakeholder: App.filters.stakeholder,
+        priority: App.filters.priority,
+        date_from: App.filters.dateFrom,
+        date_to: App.filters.dateTo
+    });
+    
+    const response = await API.get(`api/letters.php?${params}`);
+    const letters = response.letters || [];
+    App.totalPages = response.total_pages || 1;
+    
+    const stakeholderOptions = App.stakeholders.map(s => 
+        `<option value="${s.code}" ${App.filters.stakeholder === s.code ? 'selected' : ''}>${s.name}</option>`
+    ).join('');
+    
+    const html = `
+        <div class="letters-view">
+            <!-- Header Actions -->
+            <div class="view-header">
+                <div class="view-title">
+                    <h2>Letters Management</h2>
+                    <span class="text-muted">${response.total || 0} total letters</span>
+                </div>
+                <div class="view-actions">
+                    ${App.currentUser.role !== 'VIEWER' ? `
+                        <button class="btn btn-primary" onclick="showAddLetterModal()">
+                            <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/>
+                            </svg>
+                            Add Letter
+                        </button>
+                        <button class="btn btn-secondary" onclick="showBulkImportModal()">
+                            <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                            Bulk Import
+                        </button>
+                    ` : ''}
+                    
+                    <div class="view-toggle">
+                        <button class="btn-icon ${App.viewMode === 'table' ? 'active' : ''}" onclick="setViewMode('table')" title="Table View">
+                            <svg width="18" height="18" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V4zm1 0v12h12V4H4z" clip-rule="evenodd"/>
+                            </svg>
+                        </button>
+                        <button class="btn-icon ${App.viewMode === 'grid' ? 'active' : ''}" onclick="setViewMode('grid')" title="Grid View">
+                            <svg width="18" height="18" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M2 4a1 1 0 011-1h5a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1V4zM8 7a1 1 0 011-1h9a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7z"/>
+                                <path d="M14 4a1 1 0 011-1h3a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1V4z"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Filters Bar -->
+            <div class="filters-bar">
+                <div class="filter-group">
+                    <input type="text" 
+                           class="form-input" 
+                           placeholder="Search letters..." 
+                           value="${App.filters.search}"
+                           onchange="App.filters.search = this.value; App.currentPage = 1; refreshCurrentView()">
+                </div>
+                <div class="filter-group">
+                    <select class="form-select" onchange="App.filters.status = this.value; App.currentPage = 1; refreshCurrentView()">
+                        <option value="ALL" ${App.filters.status === 'ALL' ? 'selected' : ''}>All Status</option>
+                        <option value="ACTIVE" ${App.filters.status === 'ACTIVE' ? 'selected' : ''}>Active</option>
+                        <option value="PENDING" ${App.filters.status === 'PENDING' ? 'selected' : ''}>Pending</option>
+                        <option value="COMPLETED" ${App.filters.status === 'COMPLETED' ? 'selected' : ''}>Completed</option>
+                        <option value="ARCHIVED" ${App.filters.status === 'ARCHIVED' ? 'selected' : ''}>Archived</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <select class="form-select" onchange="App.filters.stakeholder = this.value; App.currentPage = 1; refreshCurrentView()">
+                        <option value="ALL">All Stakeholders</option>
+                        ${stakeholderOptions}
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <select class="form-select" onchange="App.filters.priority = this.value; App.currentPage = 1; refreshCurrentView()">
+                        <option value="ALL" ${App.filters.priority === 'ALL' ? 'selected' : ''}>All Priority</option>
+                        <option value="URGENT" ${App.filters.priority === 'URGENT' ? 'selected' : ''}>Urgent</option>
+                        <option value="HIGH" ${App.filters.priority === 'HIGH' ? 'selected' : ''}>High</option>
+                        <option value="MEDIUM" ${App.filters.priority === 'MEDIUM' ? 'selected' : ''}>Medium</option>
+                        <option value="LOW" ${App.filters.priority === 'LOW' ? 'selected' : ''}>Low</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <input type="date" class="form-input" 
+                           value="${App.filters.dateFrom}"
+                           onchange="App.filters.dateFrom = this.value; refreshCurrentView()"
+                           title="From Date">
+                </div>
+                <div class="filter-group">
+                    <input type="date" class="form-input" 
+                           value="${App.filters.dateTo}"
+                           onchange="App.filters.dateTo = this.value; refreshCurrentView()"
+                           title="To Date">
+                </div>
+                <button class="btn btn-secondary btn-sm" onclick="clearLetterFilters()">Clear</button>
+            </div>
+            
+            <!-- Bulk Actions Bar -->
+            <div id="bulk-actions-bar" class="bulk-actions-bar" style="display: none;">
+                <span><span id="selected-count">0</span> selected</span>
+                <button class="btn btn-secondary btn-sm" onclick="bulkUpdateStatus()">Update Status</button>
+                <button class="btn btn-secondary btn-sm" onclick="bulkAssignTask()">Assign Task</button>
+                <button class="btn btn-secondary btn-sm" onclick="bulkExport()">Export</button>
+                ${App.currentUser.role === 'ADMIN' ? `<button class="btn btn-danger btn-sm" onclick="bulkDelete()">Delete</button>` : ''}
+                <button class="btn btn-secondary btn-sm" onclick="clearSelection()">Clear</button>
+            </div>
+            
+            <!-- Content -->
+            ${letters.length === 0 ? 
+                '<div class="card"><div class="text-center p-xl"><p class="text-muted">No letters found</p></div></div>' :
+                (App.viewMode === 'table' ? renderLettersTable(letters) : renderLettersGrid(letters))
+            }
+            
+            <!-- Pagination -->
+            ${renderPagination()}
+        </div>
+    `;
+    
+    document.getElementById('app-content').innerHTML = html;
+}
+
+function setViewMode(mode) {
+    App.viewMode = mode;
+    App.currentPage = 1;
+    refreshCurrentView();
+}
+
+function renderLettersTable(letters) {
+    return `
+        <div class="card">
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="checkbox-cell">
+                                <input type="checkbox" onchange="toggleSelectAll(this)">
+                            </th>
+                            <th>Reference</th>
+                            <th>Subject</th>
+                            <th>Stakeholder</th>
+                            <th>Priority</th>
+                            <th>Status</th>
+                            <th>Received</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${letters.map(letter => `
+                            <tr class="${letter.priority === 'URGENT' ? 'urgent-row' : ''}">
+                                <td class="checkbox-cell">
+                                    <input type="checkbox" value="${letter.id}" onchange="toggleSelectItem('${letter.id}', this)">
+                                </td>
+                                <td>
+                                    <strong>${letter.reference_no}</strong>
+                                </td>
+                                <td>
+                                    <div class="cell-text">${letter.subject}</div>
+                                </td>
+                                <td><span class="badge ${letter.stakeholder}">${letter.stakeholder}</span></td>
+                                <td><span class="badge priority-${letter.priority?.toLowerCase()}">${letter.priority}</span></td>
+                                <td><span class="badge status-${letter.status?.toLowerCase()}">${letter.status}</span></td>
+                                <td>${formatDate(letter.received_date)}</td>
+                                <td>
+                                    <div class="action-buttons">
+                                        <button class="btn-icon" onclick="viewLetterDetail('${letter.id}')" title="View">
+                                            <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
+                                                <path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/>
+                                                <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"/>
+                                            </svg>
+                                        </button>
+                                        <button class="btn-icon" onclick="downloadLetter('${letter.id}')" title="Download">
+                                            <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                                            </svg>
+                                        </button>
+                                        ${App.currentUser.role !== 'VIEWER' ? `
+                                            <button class="btn-icon" onclick="editLetter('${letter.id}')" title="Edit">
+                                                <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
+                                                </svg>
+                                            </button>
+                                        ` : ''}
+                                    </div>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `;
+}
+
+function renderLettersGrid(letters) {
+    return `
+        <div class="grid-container">
+            ${letters.map(letter => `
+                <div class="letter-card ${letter.priority === 'URGENT' ? 'urgent' : ''}" onclick="viewLetterDetail('${letter.id}')">
+                    <div class="letter-card-header">
+                        <span class="badge ${letter.stakeholder}">${letter.stakeholder}</span>
+                        <span class="badge priority-${letter.priority?.toLowerCase()}">${letter.priority}</span>
+                    </div>
+                    <div class="letter-card-body">
+                        <h4>${letter.reference_no}</h4>
+                        <p class="letter-card-subject">${letter.subject}</p>
+                        <div class="letter-card-meta">
+                            <span>${formatDate(letter.received_date)}</span>
+                            <span class="badge status-${letter.status?.toLowerCase()}">${letter.status}</span>
+                        </div>
+                    </div>
+                    <div class="letter-card-footer">
+                        ${letter.pdf_filename ? `
+                            <span class="pdf-indicator">
+                                <svg width="14" height="14" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clip-rule="evenodd"/>
+                                </svg>
+                                PDF
+                            </span>
+                        ` : ''}
+                        <span class="task-count">${letter.task_count || 0} tasks</span>
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+function renderPagination() {
+    if (App.totalPages <= 1) return '';
+    
+    let pages = [];
+    for (let i = 1; i <= App.totalPages; i++) {
+        if (i === 1 || i === App.totalPages || (i >= App.currentPage - 2 && i <= App.currentPage + 2)) {
+            pages.push(i);
+        } else if (pages[pages.length - 1] !== '...') {
+            pages.push('...');
+        }
+    }
+    
+    return `
+        <div class="pagination">
+            <button class="btn btn-secondary btn-sm" 
+                    onclick="goToPage(${App.currentPage - 1})" 
+                    ${App.currentPage === 1 ? 'disabled' : ''}>
+                Previous
+            </button>
+            <div class="page-numbers">
+                ${pages.map(p => p === '...' ? 
+                    `<span class="page-ellipsis">...</span>` : 
+                    `<button class="page-number ${p === App.currentPage ? 'active' : ''}" onclick="goToPage(${p})">${p}</button>`
+                ).join('')}
+            </div>
+            <button class="btn btn-secondary btn-sm" 
+                    onclick="goToPage(${App.currentPage + 1})" 
+                    ${App.currentPage === App.totalPages ? 'disabled' : ''}>
+                Next
             </button>
         </div>
     `;
-    
-    document.getElementById('app-content').innerHTML = html;
 }
 
-// ===== HANDLE LETTER SUBMISSION =====
-async function handleLetterSubmit(event) {
-    event.preventDefault();
-    
-    const form = event.target;
-    const formData = new FormData(form);
-    const submitBtn = form.querySelector('button[type="submit"]');
-    
-    submitBtn.disabled = true;
-    submitBtn.innerHTML = '<div class="spinner" style="width: 16px; height: 16px;"></div> Uploading...';
-    
-    try {
-        const result = await API.upload('api/letters.php', formData);
-        showToast('Letter added successfully!', 'success');
-        
-        // Show task creation section
-        window.currentLetterId = result.letter_id;
-        document.getElementById('task-creation-section').style.display = 'block';
-        addTaskForm();
-        
-        form.reset();
-    } catch (error) {
-        showToast('Failed to add letter', 'error');
-    } finally {
-        submitBtn.disabled = false;
-        submitBtn.innerHTML = 'Add Letter';
-    }
+function goToPage(page) {
+    if (page < 1 || page > App.totalPages) return;
+    App.currentPage = page;
+    refreshCurrentView();
 }
 
-// ===== TASK FORMS =====
-let taskFormCounter = 0;
-
-function addTaskForm() {
-    taskFormCounter++;
-    const container = document.getElementById('task-forms');
+// ===== LETTER MODALS =====
+function showAddLetterModal() {
+    const stakeholderOptions = App.stakeholders.map(s => 
+        `<option value="${s.code}">${s.name} (${s.code})</option>`
+    ).join('');
     
-    const html = `
-        <div class="task-form" id="task-form-${taskFormCounter}" style="border: 1px solid var(--gray-200); padding: 1rem; margin-bottom: 1rem; border-radius: var(--radius-md);">
-            <div class="flex justify-between items-center mb-md">
-                <h4>Task ${taskFormCounter}</h4>
-                <button type="button" class="btn-icon" onclick="document.getElementById('task-form-${taskFormCounter}').remove()">
-                    <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
-                    </svg>
-                </button>
+    const modal = `
+        <div class="modal-backdrop" onclick="closeModal()">
+            <div class="modal modal-lg" onclick="event.stopPropagation()">
+                <div class="modal-header">
+                    <h3 class="modal-title">Add New Letter</h3>
+                    <button class="btn-icon" onclick="closeModal()">
+                        <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                        </svg>
+                    </button>
+                </div>
+                <form id="add-letter-form" onsubmit="handleLetterSubmit(event)">
+                    <div class="modal-body">
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label class="form-label">Reference Number *</label>
+                                <input type="text" name="reference_no" class="form-input" placeholder="ICT-862-SKP-593" required>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Stakeholder *</label>
+                                <select name="stakeholder" class="form-select" required>
+                                    <option value="">Select stakeholder</option>
+                                    ${stakeholderOptions}
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label">Subject *</label>
+                            <textarea name="subject" class="form-textarea" placeholder="Enter letter subject..." required rows="2"></textarea>
+                        </div>
+                        
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label class="form-label">Upload PDF</label>
+                                <input type="file" name="pdf" class="form-file" accept=".pdf">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">TenCent Docs Link</label>
+                                <input type="url" name="tencent_doc_url" class="form-input" placeholder="https://docs.qq.com/doc/...">
+                            </div>
+                        </div>
+                        
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label class="form-label">Received Date *</label>
+                                <input type="date" name="received_date" class="form-input" value="${new Date().toISOString().split('T')[0]}" required>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Priority</label>
+                                <select name="priority" class="form-select">
+                                    <option value="MEDIUM">Medium</option>
+                                    <option value="LOW">Low</option>
+                                    <option value="HIGH">High</option>
+                                    <option value="URGENT">Urgent</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Due Date</label>
+                                <input type="date" name="due_date" class="form-input">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Department</label>
+                                <select name="department_id" class="form-select">
+                                    <option value="">Select department</option>
+                                    ${App.departments.map(d => `<option value="${d.id}">${d.name}</option>`).join('')}
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label">Notes</label>
+                            <textarea name="notes" class="form-textarea" placeholder="Additional notes..." rows="2"></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="submit" class="btn btn-primary">
+                            <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clip-rule="evenodd"/>
+                            </svg>
+                            Add Letter
+                        </button>
+                        <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                    </div>
+                </form>
             </div>
-            
-            <div class="form-group">
-                <label class="form-label">Task Description *</label>
-                <input type="text" class="form-input task-title" placeholder="Enter task description..." required>
-            </div>
-            
-            <div class="form-group">
-                <label class="form-label">Assign To (Individual or Group)</label>
-                <input type="text" class="form-input task-assignment" placeholder="Enter name or department (e.g., QCD Team)">
-            </div>
-            
-            <button type="button" class="btn btn-primary btn-sm" onclick="createTask(${taskFormCounter})">Create Task</button>
         </div>
     `;
     
-    container.insertAdjacentHTML('beforeend', html);
+    document.getElementById('modal-container').innerHTML = modal;
 }
 
-async function createTask(formId) {
-    const form = document.getElementById(`task-form-${formId}`);
-    const title = form.querySelector('.task-title').value;
-    const assignment = form.querySelector('.task-assignment').value;
+function showBulkImportModal() {
+    const modal = `
+        <div class="modal-backdrop" onclick="closeModal()">
+            <div class="modal modal-lg" onclick="event.stopPropagation()">
+                <div class="modal-header">
+                    <h3 class="modal-title">Bulk Import Letters</h3>
+                    <button class="btn-icon" onclick="closeModal()">
+                        <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="bulk-import-container">
+                        <div class="bulk-import-tabs">
+                            <button class="tab-btn active" onclick="switchBulkTab('spreadsheet')">Spreadsheet</button>
+                            <button class="tab-btn" onclick="switchBulkTab('files')">Upload Files</button>
+                        </div>
+                        
+                        <div id="bulk-spreadsheet" class="bulk-import-tab active">
+                            <p class="text-muted mb-md">Enter letter details in the spreadsheet below. Use "Add Row" to add more letters.</p>
+                            <div class="spreadsheet-container">
+                                <table class="spreadsheet-table" id="bulk-spreadsheet-table">
+                                    <thead>
+                                        <tr>
+                                            <th style="width: 140px;">Reference *</th>
+                                            <th style="width: 120px;">Stakeholder *</th>
+                                            <th style="width: 250px;">Subject *</th>
+                                            <th style="width: 120px;">Received Date *</th>
+                                            <th style="width: 100px;">Priority</th>
+                                            <th style="width: 100px;">PDF File</th>
+                                            <th style="width: 40px;"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="spreadsheet-body">
+                                        ${generateBulkImportRow(1)}
+                                    </tbody>
+                                </table>
+                            </div>
+                            <button class="btn btn-secondary btn-sm mt-md" onclick="addBulkImportRow()">
+                                <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/>
+                                </svg>
+                                Add Row
+                            </button>
+                        </div>
+                        
+                        <div id="bulk-files" class="bulk-import-tab" style="display: none;">
+                            <div class="bulk-file-dropzone" id="bulk-dropzone">
+                                <svg width="48" height="48" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
+                                </svg>
+                                <p>Drag & drop PDF files here</p>
+                                <span>or</span>
+                                <button class="btn btn-secondary" onclick="document.getElementById('bulk-file-input').click()">Browse Files</button>
+                                <input type="file" id="bulk-file-input" multiple accept=".pdf" style="display: none;" onchange="handleBulkFileSelect(this)">
+                            </div>
+                            <div id="bulk-file-list" class="bulk-file-list mt-md"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-primary" onclick="submitBulkImport()">
+                        <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
+                        </svg>
+                        Import ${App.selectedItems.length > 0 ? App.selectedItems.length : ''} Letters
+                    </button>
+                    <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                </div>
+            </div>
+        </div>
+    `;
     
-    if (!title) {
-        showToast('Task description is required', 'error');
-        return;
-    }
-    
-    try {
-        await API.post('api/tasks.php', {
-            letter_id: window.currentLetterId,
-            title: title,
-            assigned_group: assignment || null
-        });
-        
-        showToast('Task created successfully!', 'success');
-        form.remove();
-    } catch (error) {
-        showToast('Failed to create task', 'error');
-    }
+    document.getElementById('modal-container').innerHTML = modal;
 }
 
-// ===== VIEW TASK DETAIL =====
-async function viewTaskDetail(taskId) {
+function generateBulkImportRow(index) {
+    const stakeholderOptions = App.stakeholders.map(s => `<option value="${s.code}">${s.code}</option>`).join('');
+    const today = new Date().toISOString().split('T')[0];
+    
+    return `
+        <tr class="bulk-row">
+            <td><input type="text" class="form-input form-input-sm" name="reference_no" placeholder="REF-${index}" required></td>
+            <td>
+                <select class="form-select form-select-sm" name="stakeholder" required>
+                    <option value="">Select</option>
+                    ${stakeholderOptions}
+                </select>
+            </td>
+            <td><input type="text" class="form-input form-input-sm" name="subject" placeholder="Letter subject..." required></td>
+            <td><input type="date" class="form-input form-input-sm" name="received_date" value="${today}" required></td>
+            <td>
+                <select class="form-select form-select-sm" name="priority">
+                    <option value="MEDIUM">Medium</option>
+                    <option value="LOW">Low</option>
+                    <option value="HIGH">High</option>
+                    <option value="URGENT">Urgent</option>
+                </select>
+            </td>
+            <td><input type="file" class="form-input form-input-sm" name="pdf" accept=".pdf"></td>
+            <td><button type="button" class="btn-icon btn-icon-sm text-danger" onclick="this.closest('tr').remove()">×</button></td>
+        </tr>
+    `;
+}
+
+let bulkRowCount = 1;
+function addBulkImportRow() {
+    bulkRowCount++;
+    const tbody = document.getElementById('spreadsheet-body');
+    const newRow = generateBulkImportRow(bulkRowCount);
+    tbody.insertAdjacentHTML('beforeend', newRow);
+}
+
+function switchBulkTab(tab) {
+    document.querySelectorAll('.bulk-import-tab').forEach(t => t.style.display = 'none');
+    document.querySelectorAll('.bulk-import-tabs .tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById(`bulk-${tab}`).style.display = 'block';
+    event.target.classList.add('active');
+}
+
+function handleBulkFileSelect(input) {
+    const files = Array.from(input.files);
+    const container = document.getElementById('bulk-file-list');
+    
+    files.forEach(file => {
+        const fileItem = `
+            <div class="bulk-file-item">
+                <span class="file-icon">📄</span>
+                <span class="file-name">${file.name}</span>
+                <span class="file-size">${formatFileSize(file.size)}</span>
+                <button class="btn-icon" onclick="this.parentElement.remove()">×</button>
+            </div>
+        `;
+        container.insertAdjacentHTML('beforeend', fileItem);
+    });
+}
+
+async function submitBulkImport() {
+    showToast('Bulk import functionality - API endpoint to be implemented', 'info');
+    closeModal();
+}
+
+async function viewLetterDetail(letterId) {
     try {
-        const task = await API.get(`api/tasks.php?id=${taskId}`);
+        const letter = await API.get(`api/letters.php?id=${letterId}`);
         
         const modal = `
             <div class="modal-backdrop" onclick="closeModal()">
-                <div class="modal" onclick="event.stopPropagation()">
+                <div class="modal modal-xl" onclick="event.stopPropagation()">
                     <div class="modal-header">
-                        <h3 class="modal-title">Task Details</h3>
+                        <div>
+                            <h3 class="modal-title">${letter.reference_no}</h3>
+                            <div class="modal-subtitle">
+                                <span class="badge ${letter.stakeholder}">${letter.stakeholder}</span>
+                                <span class="badge priority-${letter.priority?.toLowerCase()}">${letter.priority}</span>
+                                <span class="badge status-${letter.status?.toLowerCase()}">${letter.status}</span>
+                            </div>
+                        </div>
                         <button class="btn-icon" onclick="closeModal()">
                             <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20">
                                 <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
@@ -443,59 +975,88 @@ async function viewTaskDetail(taskId) {
                         </button>
                     </div>
                     <div class="modal-body">
-                        <div class="mb-md">
-                            <strong>Reference:</strong> ${task.reference_no}<br>
-                            <strong>Subject:</strong> ${task.subject}
-                        </div>
-                        
-                        <div class="mb-md">
-                            <strong>Task:</strong> ${task.title}
-                        </div>
-                        
-                        <div class="mb-md">
-                            <strong>Status:</strong> <span class="badge ${task.status}">${task.status.replace('_', ' ')}</span><br>
-                            <strong>Priority:</strong> <span class="badge ${task.priority}">${task.priority}</span><br>
-                            <strong>Stakeholder:</strong> <span class="badge ${task.stakeholder}">${task.stakeholder}</span>
-                        </div>
-                        
-                        ${task.assigned_to_name ? `<div class="mb-md"><strong>Assigned To:</strong> ${task.assigned_to_name}</div>` : ''}
-                        ${task.assigned_group ? `<div class="mb-md"><strong>Assigned Group:</strong> ${task.assigned_group}</div>` : ''}
-                        
-                        ${task.tencent_doc_url ? `
-                            <div class="mb-md">
-                                <strong>TenCent Doc:</strong><br>
-                                <a href="${task.tencent_doc_url}" target="_blank" class="btn btn-secondary btn-sm">Open Document</a>
-                            </div>
-                        ` : ''}
-                        
-                        ${task.pdf_filename ? `
-                            <div class="mb-md">
-                                <strong>PDF File:</strong><br>
-                                <a href="assets/uploads/${task.pdf_filename}" target="_blank" class="btn btn-secondary btn-sm">Download PDF</a>
-                            </div>
-                        ` : ''}
-                        
-                        ${task.notes ? `<div class="mb-md"><strong>Notes:</strong><br>${task.notes}</div>` : ''}
-                        
-                        ${task.updates && task.updates.length > 0 ? `
-                            <div class="mb-md">
-                                <strong>Activity History:</strong>
-                                <div style="max-height: 200px; overflow-y: auto; border: 1px solid var(--gray-200); border-radius: var(--radius-md); padding: 0.5rem; margin-top: 0.5rem;">
-                                    ${task.updates.map(update => `
-                                        <div style="padding: 0.5rem; border-bottom: 1px solid var(--gray-100);">
-                                            <small style="color: var(--gray-500);">${new Date(update.created_at).toLocaleString()}</small><br>
-                                            <strong>${update.user_name}</strong> changed status from 
-                                            <span class="badge ${update.old_status}">${update.old_status || 'NEW'}</span> to 
-                                            <span class="badge ${update.new_status}">${update.new_status}</span>
-                                            ${update.comment ? `<br><em>"${update.comment}"</em>` : ''}
+                        <div class="letter-detail-grid">
+                            <div class="letter-detail-main">
+                                <h4>${letter.subject}</h4>
+                                <div class="letter-info-grid">
+                                    <div class="info-item">
+                                        <label>Received Date</label>
+                                        <span>${formatDate(letter.received_date)}</span>
+                                    </div>
+                                    <div class="info-item">
+                                        <label>Due Date</label>
+                                        <span>${formatDate(letter.due_date) || '-'}</span>
+                                    </div>
+                                    <div class="info-item">
+                                        <label>Department</label>
+                                        <span>${letter.department_name || '-'}</span>
+                                    </div>
+                                    <div class="info-item">
+                                        <label>Created</label>
+                                        <span>${formatDate(letter.created_at)}</span>
+                                    </div>
+                                </div>
+                                ${letter.notes ? `<div class="letter-notes"><label>Notes</label><p>${letter.notes}</p></div>` : ''}
+                                
+                                <!-- PDF Viewer -->
+                                ${letter.pdf_filename ? `
+                                    <div class="pdf-viewer">
+                                        <div class="pdf-header">
+                                            <h5>Attached PDF</h5>
+                                            <a href="assets/uploads/${letter.pdf_filename}" target="_blank" class="btn btn-secondary btn-sm">Open PDF</a>
                                         </div>
-                                    `).join('')}
+                                        <iframe src="assets/uploads/${letter.pdf_filename}" class="pdf-embed"></iframe>
+                                    </div>
+                                ` : ''}
+                                
+                                ${letter.tencent_doc_url ? `
+                                    <div class="tencent-link">
+                                        <h5>TenCent Document</h5>
+                                        <a href="${letter.tencent_doc_url}" target="_blank" class="btn btn-secondary btn-sm">Open Document</a>
+                                    </div>
+                                ` : ''}
+                            </div>
+                            
+                            <div class="letter-detail-sidebar">
+                                <!-- Tasks Section -->
+                                <div class="detail-section">
+                                    <h5>Tasks (${letter.tasks?.length || 0})</h5>
+                                    ${letter.tasks?.length > 0 ? `
+                                        <div class="task-list-mini">
+                                            ${letter.tasks.map(task => `
+                                                <div class="task-item-mini" onclick="viewTaskDetail('${task.id}')">
+                                                    <span class="badge ${task.status}">${task.status?.replace('_', ' ')}</span>
+                                                    <span class="task-title">${task.title}</span>
+                                                </div>
+                                            `).join('')}
+                                        </div>
+                                    ` : '<p class="text-muted">No tasks</p>'}
+                                    ${App.currentUser.role !== 'VIEWER' ? `
+                                        <button class="btn btn-primary btn-sm mt-md" onclick="addTaskToLetter('${letter.id}')">Add Task</button>
+                                    ` : ''}
+                                </div>
+                                
+                                <!-- Activity Timeline -->
+                                <div class="detail-section">
+                                    <h5>Activity</h5>
+                                    ${letter.activities?.length > 0 ? `
+                                        <div class="activity-timeline-mini">
+                                            ${letter.activities.slice(0, 5).map(a => `
+                                                <div class="activity-mini">
+                                                    <span class="activity-time">${formatTimeAgo(a.created_at)}</span>
+                                                    <span class="activity-desc">${a.description}</span>
+                                                </div>
+                                            `).join('')}
+                                        </div>
+                                    ` : '<p class="text-muted">No activity</p>'}
                                 </div>
                             </div>
-                        ` : ''}
+                        </div>
                     </div>
                     <div class="modal-footer">
-                        <button class="btn btn-primary" onclick="updateTaskStatus('${task.id}', '${task.status}')">Update Status</button>
+                        ${App.currentUser.role !== 'VIEWER' ? `
+                            <button class="btn btn-primary" onclick="editLetter('${letter.id}'); closeModal();">Edit</button>
+                        ` : ''}
                         <button class="btn btn-secondary" onclick="closeModal()">Close</button>
                     </div>
                 </div>
@@ -504,40 +1065,91 @@ async function viewTaskDetail(taskId) {
         
         document.getElementById('modal-container').innerHTML = modal;
     } catch (error) {
-        showToast('Failed to load task details', 'error');
+        showToast('Failed to load letter details', 'error');
     }
 }
 
-// ===== UPDATE TASK STATUS =====
-async function updateTaskStatus(taskId, currentStatus) {
-    const statuses = ['PENDING', 'IN_PROGRESS', 'COMPLETED'];
-    const statusOptions = statuses.map(s => 
-        `<option value="${s}" ${s === currentStatus ? 'selected' : ''}>${s.replace('_', ' ')}</option>`
-    ).join('');
+function editLetter(letterId) {
+    showToast('Edit letter functionality - to be implemented', 'info');
+}
+
+function downloadLetter(letterId) {
+    window.open(`api/letters.php?id=${letterId}&download=1`, '_blank');
+}
+
+function clearLetterFilters() {
+    App.filters = {
+        search: '',
+        status: 'ALL',
+        stakeholder: 'ALL',
+        priority: 'ALL',
+        department: 'ALL',
+        dateFrom: '',
+        dateTo: ''
+    };
+    App.currentPage = 1;
+    refreshCurrentView();
+}
+
+// ===== BULK OPERATIONS =====
+function toggleSelectAll(checkbox) {
+    const checkboxes = document.querySelectorAll('#app-content tbody input[type="checkbox"]');
+    checkboxes.forEach(cb => {
+        cb.checked = checkbox.checked;
+        const id = cb.value;
+        if (checkbox.checked && !App.selectedItems.includes(id)) {
+            App.selectedItems.push(id);
+        } else if (!checkbox.checked) {
+            App.selectedItems = App.selectedItems.filter(i => i !== id);
+        }
+    });
+    updateBulkActionsBar();
+}
+
+function toggleSelectItem(id, checkbox) {
+    if (checkbox.checked && !App.selectedItems.includes(id)) {
+        App.selectedItems.push(id);
+    } else {
+        App.selectedItems = App.selectedItems.filter(i => i !== id);
+    }
+    updateBulkActionsBar();
+}
+
+function updateBulkActionsBar() {
+    const bar = document.getElementById('bulk-actions-bar');
+    if (bar) {
+        bar.style.display = App.selectedItems.length > 0 ? 'flex' : 'none';
+        document.getElementById('selected-count').textContent = App.selectedItems.length;
+    }
+}
+
+function clearSelection() {
+    App.selectedItems = [];
+    const checkboxes = document.querySelectorAll('#app-content tbody input[type="checkbox"]');
+    checkboxes.forEach(cb => cb.checked = false);
+    updateBulkActionsBar();
+}
+
+async function bulkUpdateStatus() {
+    if (App.selectedItems.length === 0) return;
     
     const modal = `
         <div class="modal-backdrop" onclick="closeModal()">
-            <div class="modal" onclick="event.stopPropagation()">
+            <div class="modal modal-sm" onclick="event.stopPropagation()">
                 <div class="modal-header">
-                    <h3 class="modal-title">Update Task Status</h3>
-                    <button class="btn-icon" onclick="closeModal()">
-                        <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
-                        </svg>
-                    </button>
+                    <h3 class="modal-title">Update Status (${App.selectedItems.length} items)</h3>
+                    <button class="btn-icon" onclick="closeModal()">×</button>
                 </div>
-                <form onsubmit="submitStatusUpdate(event, '${taskId}', '${currentStatus}')">
+                <form onsubmit="submitBulkStatusUpdate(event)">
                     <div class="modal-body">
                         <div class="form-group">
                             <label class="form-label">New Status</label>
                             <select name="status" class="form-select" required>
-                                ${statusOptions}
+                                <option value="ACTIVE">Active</option>
+                                <option value="PENDING">Pending</option>
+                                <option value="COMPLETED">Completed</option>
+                                <option value="ARCHIVED">Archived</option>
                             </select>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label class="form-label">Comment (optional)</label>
-                            <textarea name="comment" class="form-textarea" placeholder="Add a note about this update..."></textarea>
                         </div>
                     </div>
                     <div class="modal-footer">
@@ -552,115 +1164,1132 @@ async function updateTaskStatus(taskId, currentStatus) {
     document.getElementById('modal-container').innerHTML = modal;
 }
 
-async function submitStatusUpdate(event, taskId, oldStatus) {
+async function submitBulkStatusUpdate(event) {
+    event.preventDefault();
+    const status = event.target.status.value;
+    
+    try {
+        await API.post('api/letters.php?bulk=update', {
+            ids: App.selectedItems,
+            status: status
+        });
+        showToast(`Updated ${App.selectedItems.length} letters`, 'success');
+        closeModal();
+        clearSelection();
+        refreshCurrentView();
+    } catch (error) {
+        showToast('Bulk update failed', 'error');
+    }
+}
+
+function bulkAssignTask() {
+    showToast('Bulk assign task - to be implemented', 'info');
+}
+
+function bulkExport() {
+    const ids = App.selectedItems.join(',');
+    window.open(`api/reports.php?letters=1&ids=${ids}`, '_blank');
+}
+
+async function bulkDelete() {
+    if (!confirm(`Are you sure you want to delete ${App.selectedItems.length} letters?`)) return;
+    
+    try {
+        await API.post('api/letters.php?bulk=delete', { ids: App.selectedItems });
+        showToast(`Deleted ${App.selectedItems.length} letters`, 'success');
+        clearSelection();
+        refreshCurrentView();
+    } catch (error) {
+        showToast('Bulk delete failed', 'error');
+    }
+}
+
+// ===== LETTER SUBMISSION =====
+async function handleLetterSubmit(event) {
     event.preventDefault();
     
     const form = event.target;
     const formData = new FormData(form);
-    const newStatus = formData.get('status');
-    const comment = formData.get('comment');
+    const submitBtn = form.querySelector('button[type="submit"]');
+    
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<div class="spinner" style="width: 16px; height: 16px;"></div> Saving...';
     
     try {
-        await API.patch('api/tasks.php', {
-            id: taskId,
-            status: newStatus,
-            comment: comment
-        });
-        
-        showToast('Task status updated successfully!', 'success');
+        const result = await API.upload('api/letters.php', formData);
+        showToast('Letter added successfully!', 'success');
         closeModal();
         refreshCurrentView();
     } catch (error) {
-        showToast('Failed to update task status', 'error');
+        showToast('Failed to add letter', 'error');
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = 'Add Letter';
     }
 }
 
-// ===== ANALYTICS VIEW =====
-async function renderAnalytics() {
-    const overview = await API.get('api/analytics.php?type=overview&view=all');
-    const statusDist = await API.get('api/analytics.php?type=status_distribution&view=all');
-    const stakeholderDist = await API.get('api/analytics.php?type=stakeholder_distribution');
+// ===== DEPARTMENTS VIEW =====
+async function renderDepartments() {
+    const response = await API.get('api/departments.php?with_stats=1');
+    const departments = response.departments || [];
     
     const html = `
-        <div class="stats-grid">
-            <div class="stat-card">
-                <div class="stat-value">${overview.tasks.total}</div>
-                <div class="stat-label">Total Tasks</div>
+        <div class="departments-view">
+            <div class="view-header">
+                <div class="view-title">
+                    <h2>Departments</h2>
+                    <span class="text-muted">${departments.length} departments</span>
+                </div>
+                ${App.currentUser.role === 'ADMIN' ? `
+                    <button class="btn btn-primary" onclick="showAddDepartmentModal()">
+                        <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/>
+                        </svg>
+                        Add Department
+                    </button>
+                ` : ''}
             </div>
-            <div class="stat-card">
-                <div class="stat-value">${overview.tasks.pending}</div>
-                <div class="stat-label">Pending</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value">${overview.tasks.in_progress}</div>
-                <div class="stat-label">In Progress</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value">${overview.tasks.completed}</div>
-                <div class="stat-label">Completed</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value">${overview.avg_completion_days || 'N/A'}</div>
-                <div class="stat-label">Avg. Days to Complete</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value">${overview.letters.urgent}</div>
-                <div class="stat-label">Urgent Letters (30d)</div>
-            </div>
-        </div>
-        
-        <div class="card">
-            <div class="card-header">
-                <h3 class="card-title">Task Status Distribution</h3>
-            </div>
-            <div class="table-container">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Status</th>
-                            <th>Count</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${statusDist.map(item => `
-                            <tr>
-                                <td><span class="badge ${item.status}">${item.status.replace('_', ' ')}</span></td>
-                                <td>${item.count}</td>
-                            </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-        
-        <div class="card">
-            <div class="card-header">
-                <h3 class="card-title">Stakeholder Distribution (Last 30 Days)</h3>
-            </div>
-            <div class="table-container">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Stakeholder</th>
-                            <th>Letters</th>
-                            <th>Tasks</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${stakeholderDist.map(item => `
-                            <tr>
-                                <td><span class="badge ${item.stakeholder}">${item.stakeholder}</span></td>
-                                <td>${item.letter_count}</td>
-                                <td>${item.task_count}</td>
-                            </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
+            
+            <div class="departments-grid">
+                ${departments.map(dept => `
+                    <div class="department-card" onclick="viewDepartmentDetail('${dept.id}')">
+                        <div class="department-header">
+                            <div class="department-icon" style="background: ${dept.color || '#667eea'}20; color: ${dept.color || '#667eea'}">
+                                ${dept.name.charAt(0)}
+                            </div>
+                            <div class="department-info">
+                                <h4>${dept.name}</h4>
+                                ${dept.manager_name ? `<span class="text-muted">Manager: ${dept.manager_name}</span>` : '<span class="text-muted">No manager assigned</span>'}
+                            </div>
+                        </div>
+                        <div class="department-stats">
+                            <div class="dept-stat">
+                                <span class="dept-stat-value">${dept.letter_count || 0}</span>
+                                <span class="dept-stat-label">Letters</span>
+                            </div>
+                            <div class="dept-stat">
+                                <span class="dept-stat-value">${dept.task_count || 0}</span>
+                                <span class="dept-stat-label">Tasks</span>
+                            </div>
+                            <div class="dept-stat">
+                                <span class="dept-stat-value">${dept.user_count || 0}</span>
+                                <span class="dept-stat-label">Users</span>
+                            </div>
+                        </div>
+                        ${dept.parent_name ? `<div class="department-parent"><span class="text-muted">Parent: ${dept.parent_name}</span></div>` : ''}
+                    </div>
+                `).join('')}
             </div>
         </div>
     `;
     
     document.getElementById('app-content').innerHTML = html;
+}
+
+function showAddDepartmentModal() {
+    const parentOptions = App.departments.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
+    const userOptions = ''; // Will be loaded via API
+    
+    const modal = `
+        <div class="modal-backdrop" onclick="closeModal()">
+            <div class="modal" onclick="event.stopPropagation()">
+                <div class="modal-header">
+                    <h3 class="modal-title">Add Department</h3>
+                    <button class="btn-icon" onclick="closeModal()">×</button>
+                </div>
+                <form id="add-department-form" onsubmit="handleDepartmentSubmit(event)">
+                    <div class="modal-body">
+                        <div class="form-group">
+                            <label class="form-label">Name *</label>
+                            <input type="text" name="name" class="form-input" placeholder="e.g., Quality Control" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Code</label>
+                            <input type="text" name="code" class="form-input" placeholder="e.g., QCD">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Description</label>
+                            <textarea name="description" class="form-textarea" placeholder="Department description..." rows="2"></textarea>
+                        </div>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label class="form-label">Parent Department</label>
+                                <select name="parent_id" class="form-select">
+                                    <option value="">None (Top Level)</option>
+                                    ${parentOptions}
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Manager</label>
+                                <select name="manager_id" class="form-select">
+                                    <option value="">Select User</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Color</label>
+                            <input type="color" name="color" class="form-input" value="#667eea">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Display Order</label>
+                            <input type="number" name="display_order" class="form-input" value="0">
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="submit" class="btn btn-primary">Add Department</button>
+                        <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    `;
+    
+    document.getElementById('modal-container').innerHTML = modal;
+}
+
+async function handleDepartmentSubmit(event) {
+    event.preventDefault();
+    const formData = new FormData(event.target);
+    const data = Object.fromEntries(formData);
+    
+    try {
+        await API.post('api/departments.php', data);
+        showToast('Department added successfully!', 'success');
+        closeModal();
+        refreshCurrentView();
+    } catch (error) {
+        showToast('Failed to add department', 'error');
+    }
+}
+
+function viewDepartmentDetail(deptId) {
+    showToast('Department detail view - to be implemented', 'info');
+}
+
+// ===== USERS VIEW =====
+async function renderUsers() {
+    const response = await API.get('api/users.php');
+    const users = response.users || [];
+    
+    const html = `
+        <div class="users-view">
+            <div class="view-header">
+                <div class="view-title">
+                    <h2>Users Management</h2>
+                    <span class="text-muted">${users.length} users</span>
+                </div>
+            </div>
+            
+            <div class="filters-bar">
+                <div class="filter-group">
+                    <input type="text" class="form-input" placeholder="Search users..." onchange="filterUsers(this.value)">
+                </div>
+                <div class="filter-group">
+                    <select class="form-select" onchange="filterUsersByRole(this.value)">
+                        <option value="ALL">All Roles</option>
+                        <option value="ADMIN">Admin</option>
+                        <option value="MANAGER">Manager</option>
+                        <option value="MEMBER">Member</option>
+                        <option value="VIEWER">Viewer</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <select class="form-select" onchange="filterUsersByDepartment(this.value)">
+                        <option value="ALL">All Departments</option>
+                        ${App.departments.map(d => `<option value="${d.id}">${d.name}</option>`).join('')}
+                    </select>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>User</th>
+                                <th>Email</th>
+                                <th>Role</th>
+                                <th>Department</th>
+                                <th>Letters</th>
+                                <th>Tasks</th>
+                                <th>Joined</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${users.map(user => `
+                                <tr>
+                                    <td>
+                                        <div class="user-cell">
+                                            <img src="${user.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=667eea&color=fff`}" 
+                                                 alt="" class="user-avatar-sm">
+                                            <span>${user.name}</span>
+                                        </div>
+                                    </td>
+                                    <td>${user.email}</td>
+                                    <td><span class="badge role-${user.role?.toLowerCase()}">${user.role}</span></td>
+                                    <td>${user.department_name || '-'}</td>
+                                    <td>${user.letter_count || 0}</td>
+                                    <td>${user.task_count || 0}</td>
+                                    <td>${formatDate(user.created_at)}</td>
+                                    <td>
+                                        ${App.currentUser.role === 'ADMIN' ? `
+                                            <button class="btn btn-secondary btn-sm" onclick="editUser('${user.id}')">Edit</button>
+                                        ` : '-'}
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.getElementById('app-content').innerHTML = html;
+}
+
+function filterUsers(query) {
+    // Implement filtering
+    console.log('Filter users:', query);
+}
+
+function filterUsersByRole(role) {
+    console.log('Filter by role:', role);
+}
+
+function filterUsersByDepartment(deptId) {
+    console.log('Filter by department:', deptId);
+}
+
+function editUser(userId) {
+    showToast('Edit user - to be implemented', 'info');
+}
+
+// ===== NOTIFICATIONS VIEW =====
+async function renderNotifications() {
+    const response = await API.get('api/notifications.php');
+    const notifications = response.notifications || [];
+    
+    const html = `
+        <div class="notifications-view">
+            <div class="view-header">
+                <div class="view-title">
+                    <h2>Notifications</h2>
+                    ${response.unread_count > 0 ? `<span class="badge">${response.unread_count} unread</span>` : ''}
+                </div>
+                <div class="view-actions">
+                    <button class="btn btn-secondary" onclick="markAllAsRead()" ${response.unread_count === 0 ? 'disabled' : ''}>
+                        Mark All Read
+                    </button>
+                </div>
+            </div>
+            
+            <div class="notifications-list">
+                ${notifications.length === 0 ? 
+                    '<div class="card"><div class="text-center p-xl"><p class="text-muted">No notifications</p></div></div>' :
+                    notifications.map(notification => `
+                        <div class="notification-item ${notification.is_read ? '' : 'unread'}" onclick="viewNotification('${notification.id}', '${notification.link}')">
+                            <div class="notification-icon ${notification.type}">
+                                ${getNotificationIcon(notification.type)}
+                            </div>
+                            <div class="notification-content">
+                                <div class="notification-title">${notification.title}</div>
+                                <div class="notification-message">${notification.message}</div>
+                                <div class="notification-time">${formatTimeAgo(notification.created_at)}</div>
+                            </div>
+                            ${!notification.is_read ? '<div class="notification-dot"></div>' : ''}
+                        </div>
+                    `).join('')
+                }
+            </div>
+        </div>
+    `;
+    
+    document.getElementById('app-content').innerHTML = html;
+}
+
+function getNotificationIcon(type) {
+    const icons = {
+        'letter': '<svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clip-rule="evenodd"/></svg>',
+        'task': '<svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20"><path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/><path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5z"/></svg>',
+        'comment': '<svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z"/></svg>',
+        'system': '<svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/></svg>'
+    };
+    return icons[type] || icons.system;
+}
+
+async function viewNotification(id, link) {
+    try {
+        await API.patch('api/notifications.php', { id, is_read: true });
+        if (link) {
+            switchTab(link.split('=')[0].replace('api/', ''));
+        } else {
+            refreshCurrentView();
+        }
+    } catch (error) {
+        console.error('Failed to mark notification as read', error);
+    }
+}
+
+async function markAllAsRead() {
+    try {
+        await API.post('api/notifications.php', { action: 'mark_all_read' });
+        showToast('All notifications marked as read', 'success');
+        refreshCurrentView();
+    } catch (error) {
+        showToast('Failed to mark notifications as read', 'error');
+    }
+}
+
+// ===== SETTINGS VIEW =====
+async function renderSettings() {
+    const [branding, stakeholders, smtpStatus] = await Promise.all([
+        API.get('api/settings.php?group=branding'),
+        API.get('api/stakeholders.php'),
+        API.get('api/settings.php?group=smtp')
+    ]);
+    
+    const html = `
+        <div class="settings-view">
+            <div class="view-header">
+                <h2>Settings</h2>
+            </div>
+            
+            <div class="settings-sections">
+                <!-- Branding Section -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Branding</h3>
+                    </div>
+                    <div class="card-body">
+                        <form id="branding-form" onsubmit="saveBranding(event)">
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label class="form-label">Company Name</label>
+                                    <input type="text" name="company_name" class="form-input" 
+                                           value="${branding.company_name || ''}" placeholder="DBEDC File Tracker">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Logo</label>
+                                    <input type="file" name="company_logo" class="form-file" accept="image/*">
+                                    ${branding.company_logo ? `<img src="${branding.company_logo}" alt="Logo" class="logo-preview">` : ''}
+                                </div>
+                            </div>
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label class="form-label">Primary Color</label>
+                                    <input type="color" name="primary_color" class="form-input" 
+                                           value="${branding.primary_color || '#667eea'}">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Secondary Color</label>
+                                    <input type="color" name="secondary_color" class="form-input" 
+                                           value="${branding.secondary_color || '#764ba2'}">
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Save Branding</button>
+                        </form>
+                    </div>
+                </div>
+                
+                <!-- Stakeholders Section -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Stakeholders</h3>
+                        <button class="btn btn-primary btn-sm" onclick="showAddStakeholderModal()">
+                            <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/>
+                            </svg>
+                            Add Stakeholder
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div class="stakeholders-list">
+                            ${(stakeholders.stakeholders || []).map(s => `
+                                <div class="stakeholder-item">
+                                    <div class="stakeholder-color" style="background: ${s.color}"></div>
+                                    <div class="stakeholder-info">
+                                        <strong>${s.name}</strong>
+                                        <span class="text-muted">${s.code}</span>
+                                    </div>
+                                    <div class="stakeholder-stats">
+                                        <span>${s.letter_count || 0} letters</span>
+                                    </div>
+                                    <div class="stakeholder-actions">
+                                        <button class="btn-icon" onclick="editStakeholder('${s.id}')" title="Edit">
+                                            <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
+                                                <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
+                                            </svg>
+                                        </button>
+                                        <button class="btn-icon" onclick="deleteStakeholder('${s.id}')" title="Delete">
+                                            <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- SMTP Settings -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Email Settings (SMTP)</h3>
+                    </div>
+                    <div class="card-body">
+                        <form id="smtp-form" onsubmit="saveSMTPSettings(event)">
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label class="form-label">SMTP Host</label>
+                                    <input type="text" name="smtp_host" class="form-input" 
+                                           value="${smtpStatus.host || ''}" placeholder="smtp.gmail.com">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">SMTP Port</label>
+                                    <input type="number" name="smtp_port" class="form-input" 
+                                           value="${smtpStatus.port || ''}" placeholder="587">
+                                </div>
+                            </div>
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label class="form-label">SMTP Username</label>
+                                    <input type="email" name="smtp_username" class="form-input" 
+                                           value="${smtpStatus.username || ''}" placeholder="email@example.com">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">SMTP Password</label>
+                                    <input type="password" name="smtp_password" class="form-input" placeholder="********">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">From Email</label>
+                                <input type="email" name="smtp_from_email" class="form-input" 
+                                       value="${smtpStatus.from_email || ''}" placeholder="noreply@example.com">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">From Name</label>
+                                <input type="text" name="smtp_from_name" class="form-input" 
+                                       value="${smtpStatus.from_name || ''}" placeholder="DBEDC File Tracker">
+                            </div>
+                            <div class="form-actions">
+                                <button type="submit" class="btn btn-primary">Save Settings</button>
+                                <button type="button" class="btn btn-secondary" onclick="testSMTP()">Test Connection</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+                
+                <!-- Notification Preferences -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Notification Preferences</h3>
+                    </div>
+                    <div class="card-body">
+                        <form id="notification-prefs-form" onsubmit="saveNotificationPrefs(event)">
+                            <div class="preference-item">
+                                <div>
+                                    <strong>Email Notifications</strong>
+                                    <p class="text-muted">Receive email notifications for important updates</p>
+                                </div>
+                                <label class="toggle">
+                                    <input type="checkbox" name="email_notifications" ${App.currentUser.email_notifications ? 'checked' : ''}>
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                            <div class="preference-item">
+                                <div>
+                                    <strong>Push Notifications</strong>
+                                    <p class="text-muted">Receive browser push notifications</p>
+                                </div>
+                                <label class="toggle">
+                                    <input type="checkbox" name="push_notifications" ${App.currentUser.push_notifications ? 'checked' : ''}>
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                            <button type="submit" class="btn btn-primary mt-md">Save Preferences</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.getElementById('app-content').innerHTML = html;
+}
+
+function showAddStakeholderModal() {
+    const modal = `
+        <div class="modal-backdrop" onclick="closeModal()">
+            <div class="modal" onclick="event.stopPropagation()">
+                <div class="modal-header">
+                    <h3 class="modal-title">Add Stakeholder</h3>
+                    <button class="btn-icon" onclick="closeModal()">×</button>
+                </div>
+                <form id="add-stakeholder-form" onsubmit="handleStakeholderSubmit(event)">
+                    <div class="modal-body">
+                        <div class="form-group">
+                            <label class="form-label">Name *</label>
+                            <input type="text" name="name" class="form-input" placeholder="e.g., Roads & Highways Department" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Code *</label>
+                            <input type="text" name="code" class="form-input" placeholder="e.g., RHD" maxlength="10" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Description</label>
+                            <textarea name="description" class="form-textarea" placeholder="Stakeholder description..." rows="2"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Color</label>
+                            <input type="color" name="color" class="form-input" value="#667eea">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Display Order</label>
+                            <input type="number" name="display_order" class="form-input" value="0">
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="submit" class="btn btn-primary">Add Stakeholder</button>
+                        <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    `;
+    
+    document.getElementById('modal-container').innerHTML = modal;
+}
+
+async function handleStakeholderSubmit(event) {
+    event.preventDefault();
+    const formData = new FormData(event.target);
+    const data = Object.fromEntries(formData);
+    
+    try {
+        await API.post('api/stakeholders.php', data);
+        showToast('Stakeholder added successfully!', 'success');
+        closeModal();
+        refreshCurrentView();
+    } catch (error) {
+        showToast('Failed to add stakeholder', 'error');
+    }
+}
+
+async function saveBranding(event) {
+    event.preventDefault();
+    const formData = new FormData(event.target);
+    
+    try {
+        await API.upload('api/settings.php?group=branding', formData);
+        showToast('Branding saved successfully!', 'success');
+    } catch (error) {
+        showToast('Failed to save branding', 'error');
+    }
+}
+
+async function saveSMTPSettings(event) {
+    event.preventDefault();
+    const formData = new FormData(event.target);
+    const data = Object.fromEntries(formData);
+    
+    try {
+        await API.post('api/settings.php?group=smtp', data);
+        showToast('SMTP settings saved!', 'success');
+    } catch (error) {
+        showToast('Failed to save SMTP settings', 'error');
+    }
+}
+
+async function testSMTP() {
+    showToast('Sending test email...', 'info');
+    try {
+        await API.post('api/settings.php?group=smtp&action=test', {});
+        showToast('Test email sent! Check your inbox.', 'success');
+    } catch (error) {
+        showToast('Failed to send test email', 'error');
+    }
+}
+
+async function saveNotificationPrefs(event) {
+    event.preventDefault();
+    const formData = new FormData(event.target);
+    const data = {
+        email_notifications: formData.has('email_notifications'),
+        push_notifications: formData.has('push_notifications')
+    };
+    
+    try {
+        await API.patch('api/users.php', data);
+        App.currentUser.email_notifications = data.email_notifications;
+        App.currentUser.push_notifications = data.push_notifications;
+        showToast('Preferences saved!', 'success');
+    } catch (error) {
+        showToast('Failed to save preferences', 'error');
+    }
+}
+
+// ===== MY TASKS VIEW =====
+async function renderMyTasks() {
+    const params = new URLSearchParams({
+        view: 'my',
+        status: App.filters.status,
+        search: App.filters.search
+    });
+    const response = await API.get(`api/tasks.php?${params}`);
+    const tasks = response.tasks || [];
+    
+    const html = `
+        <div class="tasks-view">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">My Tasks</h2>
+                    <span class="text-muted">${tasks.length} tasks</span>
+                </div>
+                
+                <div class="filters-bar">
+                    <div class="filter-group">
+                        <input type="text" class="form-input" placeholder="Search tasks..." 
+                               value="${App.filters.search}"
+                               onchange="App.filters.search = this.value; refreshCurrentView()">
+                    </div>
+                    <div class="filter-group">
+                        <select class="form-select" onchange="App.filters.status = this.value; refreshCurrentView()">
+                            <option value="ALL" ${App.filters.status === 'ALL' ? 'selected' : ''}>All Status</option>
+                            <option value="PENDING" ${App.filters.status === 'PENDING' ? 'selected' : ''}>Pending</option>
+                            <option value="IN_PROGRESS" ${App.filters.status === 'IN_PROGRESS' ? 'selected' : ''}>In Progress</option>
+                            <option value="COMPLETED" ${App.filters.status === 'COMPLETED' ? 'selected' : ''}>Completed</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-secondary btn-sm" onclick="refreshCurrentView()">
+                        <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/>
+                        </svg>
+                    </button>
+                </div>
+                
+                ${tasks.length === 0 ? 
+                    '<p class="text-center p-xl text-muted">No tasks assigned to you</p>' :
+                    renderTaskTable(tasks)
+                }
+            </div>
+        </div>
+    `;
+    
+    document.getElementById('app-content').innerHTML = html;
+}
+
+// ===== ALL TASKS VIEW =====
+async function renderAllTasks() {
+    const params = new URLSearchParams({
+        view: 'all',
+        status: App.filters.status,
+        stakeholder: App.filters.stakeholder,
+        search: App.filters.search
+    });
+    const response = await API.get(`api/tasks.php?${params}`);
+    const tasks = response.tasks || [];
+    
+    const stakeholderOptions = App.stakeholders.map(s => 
+        `<option value="${s.code}" ${App.filters.stakeholder === s.code ? 'selected' : ''}>${s.name}</option>`
+    ).join('');
+    
+    const html = `
+        <div class="tasks-view">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">All Tasks</h2>
+                    <span class="text-muted">${tasks.length} tasks</span>
+                </div>
+                
+                <div class="filters-bar">
+                    <div class="filter-group">
+                        <input type="text" class="form-input" placeholder="Search tasks..." 
+                               value="${App.filters.search}"
+                               onchange="App.filters.search = this.value; refreshCurrentView()">
+                    </div>
+                    <div class="filter-group">
+                        <select class="form-select" onchange="App.filters.status = this.value; refreshCurrentView()">
+                            <option value="ALL" ${App.filters.status === 'ALL' ? 'selected' : ''}>All Status</option>
+                            <option value="PENDING" ${App.filters.status === 'PENDING' ? 'selected' : ''}>Pending</option>
+                            <option value="IN_PROGRESS" ${App.filters.status === 'IN_PROGRESS' ? 'selected' : ''}>In Progress</option>
+                            <option value="COMPLETED" ${App.filters.status === 'COMPLETED' ? 'selected' : ''}>Completed</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <select class="form-select" onchange="App.filters.stakeholder = this.value; refreshCurrentView()">
+                            <option value="ALL">All Stakeholders</option>
+                            ${stakeholderOptions}
+                        </select>
+                    </div>
+                    <button class="btn btn-secondary btn-sm" onclick="refreshCurrentView()">
+                        <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/>
+                        </svg>
+                    </button>
+                </div>
+                
+                ${tasks.length === 0 ? 
+                    '<p class="text-center p-xl text-muted">No tasks found</p>' :
+                    renderTaskTable(tasks)
+                }
+            </div>
+        </div>
+    `;
+    
+    document.getElementById('app-content').innerHTML = html;
+}
+
+// ===== TASK TABLE RENDERER =====
+function renderTaskTable(tasks) {
+    return `
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Reference</th>
+                        <th>Task</th>
+                        <th>Stakeholder</th>
+                        <th>Priority</th>
+                        <th>Status</th>
+                        <th>Assigned To</th>
+                        <th>Due Date</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${tasks.map(task => `
+                        <tr class="${task.priority === 'URGENT' ? 'urgent-row' : ''}">
+                            <td><strong>${task.reference_no}</strong></td>
+                            <td>
+                                <div class="cell-text">${task.title}</div>
+                                <small class="text-muted">${task.subject?.substring(0, 50)}...</small>
+                            </td>
+                            <td><span class="badge ${task.stakeholder}">${task.stakeholder}</span></td>
+                            <td><span class="badge priority-${task.priority?.toLowerCase()}">${task.priority}</span></td>
+                            <td><span class="badge status-${task.status?.toLowerCase()}">${task.status?.replace('_', ' ')}</span></td>
+                            <td>${task.assigned_to_name || task.assigned_group || '-'}</td>
+                            <td>${formatDate(task.due_date) || '-'}</td>
+                            <td>
+                                <div class="action-buttons">
+                                    <button class="btn-icon" onclick="viewTaskDetail('${task.id}')" title="View">
+                                        <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
+                                            <path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/>
+                                            <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"/>
+                                        </svg>
+                                    </button>
+                                    <button class="btn-icon" onclick="updateTaskStatus('${task.id}', '${task.status}')" title="Update">
+                                        <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+// ===== ANALYTICS VIEW =====
+async function renderAnalytics() {
+    const [overview, statusDist, stakeholderDist, monthlyTrend] = await Promise.all([
+        API.get('api/analytics.php?type=overview'),
+        API.get('api/analytics.php?type=status_distribution'),
+        API.get('api/analytics.php?type=stakeholder_distribution'),
+        API.get('api/analytics.php?type=monthly_trend')
+    ]);
+    
+    const html = `
+        <div class="analytics-view">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value">${overview.letters?.total || 0}</div>
+                    <div class="stat-label">Total Letters</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${overview.tasks?.total || 0}</div>
+                    <div class="stat-label">Total Tasks</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${overview.tasks?.pending || 0}</div>
+                    <div class="stat-label">Pending Tasks</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${overview.tasks?.completed || 0}</div>
+                    <div class="stat-label">Completed Tasks</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${overview.avg_completion_days || '-'}</div>
+                    <div class="stat-label">Avg. Days to Complete</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${overview.completion_rate || 0}%</div>
+                    <div class="stat-label">Completion Rate</div>
+                </div>
+            </div>
+            
+            <div class="analytics-grid">
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Task Status Distribution</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            ${renderStatusChart(statusDist)}
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">By Stakeholder</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Stakeholder</th>
+                                        <th>Letters</th>
+                                        <th>Tasks</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${(stakeholderDist || []).map(item => `
+                                        <tr>
+                                            <td><span class="badge ${item.stakeholder}">${item.stakeholder}</span></td>
+                                            <td>${item.letter_count}</td>
+                                            <td>${item.task_count}</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card mt-lg">
+                <div class="card-header">
+                    <h3 class="card-title">Export Reports</h3>
+                </div>
+                <div class="card-body">
+                    <div class="export-options">
+                        <button class="btn btn-secondary" onclick="exportLetters()">
+                            <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                            Export Letters CSV
+                        </button>
+                        <button class="btn btn-secondary" onclick="exportTasks()">
+                            <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                            Export Tasks CSV
+                        </button>
+                        <button class="btn btn-secondary" onclick="exportReport('full')">
+                            <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                            Full Report
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.getElementById('app-content').innerHTML = html;
+}
+
+function renderStatusChart(data) {
+    if (!data || data.length === 0) return '<p class="text-center text-muted">No data available</p>';
+    
+    const max = Math.max(...data.map(d => d.count));
+    return `
+        <div class="bar-chart">
+            ${data.map(item => `
+                <div class="bar-item">
+                    <div class="bar-label">${item.status?.replace('_', ' ')}</div>
+                    <div class="bar-container">
+                        <div class="bar-fill status-${item.status?.toLowerCase()}" style="width: ${(item.count / max) * 100}%"></div>
+                        <span class="bar-value">${item.count}</span>
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+function exportLetters() {
+    window.open('api/reports.php?letters=1', '_blank');
+}
+
+function exportTasks() {
+    window.open('api/reports.php?tasks=1', '_blank');
+}
+
+function exportReport(type) {
+    window.open(`api/reports.php?type=${type}`, '_blank');
+}
+
+// ===== TASK DETAIL & UPDATE =====
+async function viewTaskDetail(taskId) {
+    try {
+        const task = await API.get(`api/tasks.php?id=${taskId}`);
+        
+        const modal = `
+            <div class="modal-backdrop" onclick="closeModal()">
+                <div class="modal modal-lg" onclick="event.stopPropagation()">
+                    <div class="modal-header">
+                        <h3 class="modal-title">Task Details</h3>
+                        <button class="btn-icon" onclick="closeModal()">
+                            <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="task-detail-header">
+                            <span class="badge ${task.stakeholder}">${task.stakeholder}</span>
+                            <span class="badge priority-${task.priority?.toLowerCase()}">${task.priority}</span>
+                            <span class="badge status-${task.status?.toLowerCase()}">${task.status?.replace('_', ' ')}</span>
+                        </div>
+                        
+                        <h4 class="mt-md">${task.title}</h4>
+                        <p class="text-muted">Reference: ${task.reference_no}</p>
+                        
+                        <div class="task-info-grid">
+                            <div class="info-item">
+                                <label>Assigned To</label>
+                                <span>${task.assigned_to_name || task.assigned_group || '-'}</span>
+                            </div>
+                            <div class="info-item">
+                                <label>Due Date</label>
+                                <span>${formatDate(task.due_date) || '-'}</span>
+                            </div>
+                            <div class="info-item">
+                                <label>Created</label>
+                                <span>${formatDate(task.created_at)}</span>
+                            </div>
+                            <div class="info-item">
+                                <label>Last Updated</label>
+                                <span>${formatDate(task.updated_at)}</span>
+                            </div>
+                        </div>
+                        
+                        ${task.tencent_doc_url ? `
+                            <div class="mt-md">
+                                <label>TenCent Document</label><br>
+                                <a href="${task.tencent_doc_url}" target="_blank" class="btn btn-secondary btn-sm">Open Document</a>
+                            </div>
+                        ` : ''}
+                        
+                        ${task.updates && task.updates.length > 0 ? `
+                            <div class="mt-lg">
+                                <h5>Activity History</h5>
+                                <div class="activity-timeline">
+                                    ${task.updates.map(update => `
+                                        <div class="activity-item">
+                                            <div class="activity-icon status">
+                                                <svg width="12" height="12" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                                                </svg>
+                                            </div>
+                                            <div class="activity-content">
+                                                <div class="activity-text">
+                                                    <strong>${update.user_name}</strong> changed status from 
+                                                    <span class="badge ${update.old_status}">${update.old_status || 'NEW'}</span> to 
+                                                    <span class="badge ${update.new_status}">${update.new_status}</span>
+                                                </div>
+                                                ${update.comment ? `<p class="activity-comment">"${update.comment}"</p>` : ''}
+                                                <div class="activity-meta">${formatTimeAgo(update.created_at)}</div>
+                                            </div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        ` : ''}
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn btn-primary" onclick="updateTaskStatus('${task.id}', '${task.status}'); closeModal();">Update Status</button>
+                        <button class="btn btn-secondary" onclick="closeModal()">Close</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.getElementById('modal-container').innerHTML = modal;
+    } catch (error) {
+        showToast('Failed to load task details', 'error');
+    }
+}
+
+async function updateTaskStatus(taskId, currentStatus) {
+    const statuses = ['PENDING', 'IN_PROGRESS', 'COMPLETED'];
+    const statusOptions = statuses.map(s => 
+        `<option value="${s}" ${s === currentStatus ? 'selected' : ''}>${s.replace('_', ' ')}</option>`
+    ).join('');
+    
+    const modal = `
+        <div class="modal-backdrop" onclick="closeModal()">
+            <div class="modal modal-sm" onclick="event.stopPropagation()">
+                <div class="modal-header">
+                    <h3 class="modal-title">Update Task Status</h3>
+                    <button class="btn-icon" onclick="closeModal()">×</button>
+                </div>
+                <form onsubmit="submitStatusUpdate(event, '${taskId}')">
+                    <div class="modal-body">
+                        <div class="form-group">
+                            <label class="form-label">New Status</label>
+                            <select name="status" class="form-select" required>
+                                ${statusOptions}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Comment (optional)</label>
+                            <textarea name="comment" class="form-textarea" placeholder="Add a note..." rows="2"></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="submit" class="btn btn-primary">Update</button>
+                        <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    `;
+    
+    document.getElementById('modal-container').innerHTML = modal;
+}
+
+async function submitStatusUpdate(event, taskId) {
+    event.preventDefault();
+    const formData = new FormData(event.target);
+    const data = {
+        id: taskId,
+        status: formData.get('status'),
+        comment: formData.get('comment')
+    };
+    
+    try {
+        await API.patch('api/tasks.php', data);
+        showToast('Task status updated!', 'success');
+        closeModal();
+        refreshCurrentView();
+    } catch (error) {
+        showToast('Failed to update task', 'error');
+    }
+}
+
+function addTaskToLetter(letterId) {
+    showToast('Add task to letter - to be implemented', 'info');
+    closeModal();
 }
 
 // ===== UTILITY FUNCTIONS =====
@@ -672,72 +2301,23 @@ function closeModal() {
     document.getElementById('modal-container').innerHTML = '';
 }
 
+function hideUserMenu() {
+    const menu = document.getElementById('user-menu');
+    if (menu) menu.style.display = 'none';
+}
+
 function showUserMenu() {
     const menu = document.getElementById('user-menu');
     menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
 }
 
-// Close dropdown when clicking outside
-document.addEventListener('click', (e) => {
-    const menu = document.getElementById('user-menu');
-    const btn = document.getElementById('user-menu-btn');
-    if (menu && !menu.contains(e.target) && !btn.contains(e.target)) {
-        menu.style.display = 'none';
-    }
-});
-
-function editProfile() {
-    const user = App.currentUser;
-    const modal = `
-        <div class="modal-backdrop" onclick="closeModal()">
-            <div class="modal" onclick="event.stopPropagation()">
-                <div class="modal-header">
-                    <h3 class="modal-title">Edit Profile</h3>
-                    <button class="btn-icon" onclick="closeModal()">×</button>
-                </div>
-                <form onsubmit="saveProfile(event)">
-                    <div class="modal-body">
-                        <div class="form-group">
-                            <label class="form-label">Name</label>
-                            <input type="text" name="name" class="form-input" value="${user.name}" required>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Department</label>
-                            <input type="text" name="department" class="form-input" value="${user.department || ''}" placeholder="e.g., QCD, Materials">
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Email</label>
-                            <input type="email" class="form-input" value="${user.email}" disabled>
-                            <small style="color: var(--gray-500);">Email cannot be changed</small>
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="submit" class="btn btn-primary">Save</button>
-                        <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    `;
-    document.getElementById('modal-container').innerHTML = modal;
+function toggleMobileMenu() {
+    const nav = document.querySelector('.tabs-nav .container');
+    nav.classList.toggle('mobile-open');
 }
 
-async function saveProfile(event) {
-    event.preventDefault();
-    const formData = new FormData(event.target);
-    
-    try {
-        await API.patch('api/users.php', {
-            name: formData.get('name'),
-            department: formData.get('department')
-        });
-        
-        showToast('Profile updated successfully!', 'success');
-        closeModal();
-        location.reload(); // Reload to update header
-    } catch (error) {
-        showToast('Failed to update profile', 'error');
-    }
+function editProfile() {
+    showToast('Edit profile - to be implemented', 'info');
 }
 
 function showToast(message, type = 'info') {
@@ -760,7 +2340,54 @@ function showToast(message, type = 'info') {
     }, 5000);
 }
 
-// ===== INITIALIZE APP =====
+function formatDate(dateStr) {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+function formatTimeAgo(dateStr) {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diff = Math.floor((now - date) / 1000);
+    
+    if (diff < 60) return 'Just now';
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`;
+    return formatDate(dateStr);
+}
+
+function formatFileSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+// ===== USER MENU DROPDOWN CLICK OUTSIDE =====
+document.addEventListener('click', (e) => {
+    const menu = document.getElementById('user-menu');
+    const userSection = document.querySelector('.user-section');
+    if (menu && !menu.contains(e.target) && (!userSection || !userSection.contains(e.target))) {
+        menu.style.display = 'none';
+    }
+});
+
+// ===== GLOBAL SEARCH =====
 document.addEventListener('DOMContentLoaded', () => {
-    loadView('my-tasks');
+    const searchInput = document.getElementById('global-search');
+    if (searchInput) {
+        let debounceTimer;
+        searchInput.addEventListener('input', (e) => {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+                App.filters.search = e.target.value;
+                refreshCurrentView();
+            }, 300);
+        });
+    }
+    
+    // Initialize dashboard
+    loadView('dashboard');
 });

@@ -1,12 +1,11 @@
 <?php
 /**
  * Departments API Endpoint
- * Handles hierarchical department management with CRUD operations
+ * Handles department CRUD operations with hierarchy support
  */
 
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/permissions.php';
-
 ensureAuthenticated();
 
 $method = $_SERVER['REQUEST_METHOD'];
@@ -17,15 +16,13 @@ switch ($method) {
         handleGet();
         break;
     case 'POST':
-        checkPermission('departments', 'create');
         handlePost();
         break;
     case 'PATCH':
-        checkPermission('departments', 'update');
+    case 'PUT':
         handleUpdate();
         break;
     case 'DELETE':
-        checkPermission('departments', 'delete');
         handleDelete();
         break;
     default:
@@ -33,290 +30,396 @@ switch ($method) {
 }
 
 /**
- * GET - Fetch departments with hierarchy
+ * GET - Fetch departments
  */
 function handleGet() {
-    global $pdo;
+    global $pdo, $user;
     
-    // Get specific department
-    if (!empty($_GET['id'])) {
-        $stmt = $pdo->prepare("
-            SELECT d.*, 
-                   u.name as manager_name, u.email as manager_email,
-                   p.name as parent_name,
-                   (SELECT COUNT(*) FROM users WHERE department_id = d.id AND is_active = TRUE) as user_count,
-                   (SELECT COUNT(*) FROM departments WHERE parent_id = d.id) as child_count
-            FROM departments d
-            LEFT JOIN users u ON d.manager_id = u.id
-            LEFT JOIN departments p ON d.parent_id = p.id
-            WHERE d.id = ? AND d.is_active = TRUE
-        ");
-        $stmt->execute([$_GET['id']]);
-        $dept = $stmt->fetch();
-        
-        if (!$dept) {
-            jsonError('Department not found', 404);
+    $id = $_GET['id'] ?? null;
+    $tree = isset($_GET['tree']);
+    $stats = isset($_GET['stats']);
+    
+    try {
+        if ($id) {
+            // Get single department with details
+            $stmt = $pdo->prepare("
+                SELECT d.*, 
+                       m.name as manager_name, m.email as manager_email, m.avatar_url as manager_avatar,
+                       p.name as parent_name,
+                       (SELECT COUNT(*) FROM users WHERE department_id = d.id AND is_active = TRUE) as user_count,
+                       (SELECT COUNT(*) FROM letters WHERE department_id = d.id AND status != 'DELETED') as letter_count,
+                       (SELECT COUNT(*) FROM tasks WHERE assigned_department = d.id) as task_count
+                FROM departments d
+                LEFT JOIN users m ON d.manager_id = m.id
+                LEFT JOIN departments p ON d.parent_id = p.id
+                WHERE d.id = ?
+            ");
+            $stmt->execute([$id]);
+            $department = $stmt->fetch();
+            
+            if (!$department) {
+                jsonError('Department not found', 404);
+            }
+            
+            // Get child departments
+            $stmt = $pdo->prepare("SELECT id, name FROM departments WHERE parent_id = ? AND is_active = TRUE ORDER BY name");
+            $stmt->execute([$id]);
+            $department['children'] = $stmt->fetchAll();
+            
+            // Get department users
+            $stmt = $pdo->prepare("
+                SELECT id, name, email, role, avatar_url 
+                FROM users 
+                WHERE department_id = ? AND is_active = TRUE 
+                ORDER BY name
+            ");
+            $stmt->execute([$id]);
+            $department['users'] = $stmt->fetchAll();
+            
+            jsonResponse($department);
         }
         
-        // Get children
-        $stmt = $pdo->prepare("
-            SELECT d.*, u.name as manager_name,
+        // Get hierarchy tree
+        if ($tree) {
+            $departments = getDepartmentTree();
+            jsonResponse(['tree' => $departments]);
+        }
+        
+        // Get with stats
+        if ($stats) {
+            $stmt = $pdo->query("SELECT * FROM view_department_stats ORDER BY name");
+            $departments = $stmt->fetchAll();
+            jsonResponse(['departments' => $departments]);
+        }
+        
+        // Get all departments (flat list)
+        $activeOnly = !isset($_GET['all']);
+        
+        $sql = "
+            SELECT d.*, 
+                   m.name as manager_name,
+                   p.name as parent_name,
                    (SELECT COUNT(*) FROM users WHERE department_id = d.id AND is_active = TRUE) as user_count
             FROM departments d
-            LEFT JOIN users u ON d.manager_id = u.id
-            WHERE d.parent_id = ? AND d.is_active = TRUE
-            ORDER BY d.name
-        ");
-        $stmt->execute([$_GET['id']]);
-        $dept['children'] = $stmt->fetchAll();
+            LEFT JOIN users m ON d.manager_id = m.id
+            LEFT JOIN departments p ON d.parent_id = p.id
+        ";
         
-        // Get users
-        $stmt = $pdo->prepare("
-            SELECT id, name, email, role, avatar_url
-            FROM users
-            WHERE department_id = ? AND is_active = TRUE
-            ORDER BY name
-        ");
-        $stmt->execute([$_GET['id']]);
-        $dept['users'] = $stmt->fetchAll();
+        if ($activeOnly) {
+            $sql .= " WHERE d.is_active = TRUE";
+        }
         
-        jsonResponse($dept);
-    }
-    
-    // Get tree structure
-    if (isset($_GET['tree'])) {
-        $stmt = $pdo->query("
-            SELECT d.*, 
-                   u.name as manager_name,
-                   (SELECT COUNT(*) FROM users WHERE department_id = d.id AND is_active = TRUE) as user_count,
-                   (SELECT COUNT(*) FROM departments WHERE parent_id = d.id) as child_count
-            FROM departments d
-            LEFT JOIN users u ON d.manager_id = u.id
-            WHERE d.is_active = TRUE
-            ORDER BY d.parent_id, d.name
-        ");
-        $allDepts = $stmt->fetchAll();
+        $sql .= " ORDER BY d.display_order, d.name";
         
-        $tree = buildTree($allDepts);
-        jsonResponse($tree);
+        $stmt = $pdo->query($sql);
+        $departments = $stmt->fetchAll();
+        
+        jsonResponse([
+            'departments' => $departments,
+            'total' => count($departments)
+        ]);
+        
+    } catch (PDOException $e) {
+        error_log("Departments GET error: " . $e->getMessage());
+        jsonError('Failed to fetch departments', 500);
     }
-    
-    // Get all departments (flat list)
-    $search = $_GET['search'] ?? '';
-    $filters = [];
-    $params = [];
-    
-    if ($search) {
-        $filters[] = "(d.name LIKE ? OR d.description LIKE ?)";
-        $params[] = "%$search%";
-        $params[] = "%$search%";
-    }
-    
-    $whereClause = $filters ? 'WHERE ' . implode(' AND ', $filters) . ' AND d.is_active = TRUE' : 'WHERE d.is_active = TRUE';
-    
-    $stmt = $pdo->prepare("
-        SELECT d.*, 
-               u.name as manager_name,
-               p.name as parent_name,
-               (SELECT COUNT(*) FROM users WHERE department_id = d.id AND is_active = TRUE) as user_count,
-               (SELECT COUNT(*) FROM departments WHERE parent_id = d.id) as child_count
-        FROM departments d
-        LEFT JOIN users u ON d.manager_id = u.id
-        LEFT JOIN departments p ON d.parent_id = p.id
-        $whereClause
-        ORDER BY d.parent_id, d.name
-    ");
-    
-    $stmt->execute($params);
-    jsonResponse($stmt->fetchAll());
 }
 
 /**
- * POST - Create new department
+ * Get department hierarchy tree
+ */
+function getDepartmentTree($parentId = null) {
+    global $pdo;
+    
+    $stmt = $pdo->prepare("
+        SELECT d.id, d.name, d.description, d.manager_id,
+               m.name as manager_name,
+               (SELECT COUNT(*) FROM users WHERE department_id = d.id AND is_active = TRUE) as user_count
+        FROM departments d
+        LEFT JOIN users m ON d.manager_id = m.id
+        WHERE d.is_active = TRUE AND " . ($parentId ? "d.parent_id = ?" : "d.parent_id IS NULL") . "
+        ORDER BY d.display_order, d.name
+    ");
+    
+    $stmt->execute($parentId ? [$parentId] : []);
+    $departments = $stmt->fetchAll();
+    
+    foreach ($departments as &$dept) {
+        $dept['children'] = getDepartmentTree($dept['id']);
+    }
+    
+    return $departments;
+}
+
+/**
+ * POST - Create department
  */
 function handlePost() {
     global $pdo, $user;
     
-    $data = json_decode(file_get_contents('php://input'), true);
-    
-    // Validate
-    if (empty($data['name'])) {
-        jsonError('Department name is required');
+    // Only admins can create departments
+    if ($user['role'] !== 'ADMIN') {
+        jsonError('Only administrators can create departments', 403);
     }
     
-    // Check for duplicate name
-    $stmt = $pdo->prepare("SELECT id FROM departments WHERE name = ? AND is_active = TRUE");
-    $stmt->execute([$data['name']]);
-    if ($stmt->fetch()) {
-        jsonError('Department with this name already exists');
+    $input = json_decode(file_get_contents('php://input'), true);
+    
+    // Validate required fields
+    if (empty($input['name'])) {
+        jsonError('Department name is required', 400);
     }
     
-    // Validate parent_id
-    if (!empty($data['parent_id'])) {
-        $stmt = $pdo->prepare("SELECT id FROM departments WHERE id = ? AND is_active = TRUE");
-        $stmt->execute([$data['parent_id']]);
+    // Validate parent exists if provided
+    if (!empty($input['parent_id'])) {
+        $stmt = $pdo->prepare("SELECT id FROM departments WHERE id = ?");
+        $stmt->execute([$input['parent_id']]);
         if (!$stmt->fetch()) {
-            jsonError('Parent department not found');
+            jsonError('Parent department not found', 400);
         }
     }
     
-    // Validate manager_id
-    if (!empty($data['manager_id'])) {
+    // Validate manager exists if provided
+    if (!empty($input['manager_id'])) {
         $stmt = $pdo->prepare("SELECT id FROM users WHERE id = ? AND is_active = TRUE");
-        $stmt->execute([$data['manager_id']]);
+        $stmt->execute([$input['manager_id']]);
         if (!$stmt->fetch()) {
-            jsonError('Manager user not found');
+            jsonError('Manager user not found', 400);
         }
     }
     
     try {
-        $deptId = generateULID();
-        $stmt = $pdo->prepare("
-            INSERT INTO departments (id, name, description, parent_id, manager_id)
-            VALUES (?, ?, ?, ?, ?)
-        ");
+        $id = generateULID();
         
+        // Get next display order
+        $stmt = $pdo->query("SELECT COALESCE(MAX(display_order), 0) + 1 FROM departments");
+        $displayOrder = (int)$stmt->fetchColumn();
+        
+        $stmt = $pdo->prepare("
+            INSERT INTO departments (id, name, description, parent_id, manager_id, display_order)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ");
         $stmt->execute([
-            $deptId,
-            $data['name'],
-            $data['description'] ?? null,
-            $data['parent_id'] ?? null,
-            $data['manager_id'] ?? null
+            $id,
+            trim($input['name']),
+            $input['description'] ?? null,
+            $input['parent_id'] ?? null,
+            $input['manager_id'] ?? null,
+            $input['display_order'] ?? $displayOrder
         ]);
         
         // Log activity
-        logActivity($user['id'], 'department_created', 'department', $deptId, "Created department: {$data['name']}");
+        logActivity(
+            $user['id'],
+            'department_created',
+            'department',
+            $id,
+            "Department '{$input['name']}' created",
+            null
+        );
         
         jsonResponse([
             'success' => true,
-            'message' => 'Department created successfully',
-            'department_id' => $deptId
+            'id' => $id,
+            'message' => 'Department created successfully'
         ], 201);
         
     } catch (PDOException $e) {
-        jsonError('Database error: ' . $e->getMessage(), 500);
+        error_log("Department create error: " . $e->getMessage());
+        jsonError('Failed to create department', 500);
     }
 }
 
 /**
- * PATCH - Update department
+ * PATCH/PUT - Update department
  */
 function handleUpdate() {
     global $pdo, $user;
     
-    $data = json_decode(file_get_contents('php://input'), true);
-    
-    if (empty($data['id'])) {
-        jsonError('Department ID is required');
+    // Only admins can update departments
+    if ($user['role'] !== 'ADMIN') {
+        jsonError('Only administrators can update departments', 403);
     }
     
-    // Check if exists
-    $stmt = $pdo->prepare("SELECT * FROM departments WHERE id = ? AND is_active = TRUE");
-    $stmt->execute([$data['id']]);
-    $dept = $stmt->fetch();
+    $input = json_decode(file_get_contents('php://input'), true);
     
-    if (!$dept) {
+    if (empty($input['id'])) {
+        jsonError('Department ID is required', 400);
+    }
+    
+    // Check if department exists
+    $stmt = $pdo->prepare("SELECT * FROM departments WHERE id = ?");
+    $stmt->execute([$input['id']]);
+    $department = $stmt->fetch();
+    
+    if (!$department) {
         jsonError('Department not found', 404);
+    }
+    
+    // Prevent circular parent reference
+    if (!empty($input['parent_id'])) {
+        if ($input['parent_id'] === $input['id']) {
+            jsonError('Department cannot be its own parent', 400);
+        }
+        
+        // Check if new parent is a child of this department
+        if (isChildDepartment($input['id'], $input['parent_id'])) {
+            jsonError('Cannot set a child department as parent', 400);
+        }
     }
     
     // Build update query
     $updates = [];
     $params = [];
     
-    $allowedFields = ['name', 'description', 'parent_id', 'manager_id'];
-    foreach ($allowedFields as $field) {
-        if (isset($data[$field])) {
-            // Prevent circular parent reference
-            if ($field === 'parent_id' && $data[$field] === $data['id']) {
-                jsonError('Department cannot be its own parent');
-            }
-            
-            $updates[] = "$field = ?";
-            $params[] = $data[$field];
-        }
+    if (isset($input['name'])) {
+        $updates[] = "name = ?";
+        $params[] = trim($input['name']);
+    }
+    
+    if (isset($input['description'])) {
+        $updates[] = "description = ?";
+        $params[] = $input['description'];
+    }
+    
+    if (array_key_exists('parent_id', $input)) {
+        $updates[] = "parent_id = ?";
+        $params[] = $input['parent_id'];
+    }
+    
+    if (array_key_exists('manager_id', $input)) {
+        $updates[] = "manager_id = ?";
+        $params[] = $input['manager_id'];
+    }
+    
+    if (isset($input['is_active'])) {
+        $updates[] = "is_active = ?";
+        $params[] = (bool)$input['is_active'];
+    }
+    
+    if (isset($input['display_order'])) {
+        $updates[] = "display_order = ?";
+        $params[] = (int)$input['display_order'];
     }
     
     if (empty($updates)) {
-        jsonError('No fields to update');
+        jsonError('No fields to update', 400);
     }
     
-    $params[] = $data['id'];
-    
-    $sql = "UPDATE departments SET " . implode(', ', $updates) . " WHERE id = ?";
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute($params);
-    
-    // Log activity
-    logActivity($user['id'], 'department_updated', 'department', $data['id'], "Updated department: {$dept['name']}");
-    
-    jsonResponse([
-        'success' => true,
-        'message' => 'Department updated successfully'
-    ]);
+    try {
+        $params[] = $input['id'];
+        $sql = "UPDATE departments SET " . implode(", ", $updates) . ", updated_at = NOW() WHERE id = ?";
+        
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        
+        // Log activity
+        logActivity(
+            $user['id'],
+            'department_updated',
+            'department',
+            $input['id'],
+            "Department '{$department['name']}' updated",
+            ['changes' => array_keys($input)]
+        );
+        
+        jsonResponse([
+            'success' => true,
+            'message' => 'Department updated successfully'
+        ]);
+        
+    } catch (PDOException $e) {
+        error_log("Department update error: " . $e->getMessage());
+        jsonError('Failed to update department', 500);
+    }
 }
 
 /**
- * DELETE - Soft delete department
+ * Check if targetId is a child of parentId
+ */
+function isChildDepartment($parentId, $targetId) {
+    global $pdo;
+    
+    $stmt = $pdo->prepare("SELECT parent_id FROM departments WHERE id = ?");
+    $stmt->execute([$targetId]);
+    $result = $stmt->fetch();
+    
+    if (!$result || !$result['parent_id']) {
+        return false;
+    }
+    
+    if ($result['parent_id'] === $parentId) {
+        return true;
+    }
+    
+    return isChildDepartment($parentId, $result['parent_id']);
+}
+
+/**
+ * DELETE - Delete department
  */
 function handleDelete() {
     global $pdo, $user;
     
-    parse_str(file_get_contents('php://input'), $_DELETE);
-    
-    if (empty($_DELETE['id'])) {
-        jsonError('Department ID is required');
+    // Only admins can delete departments
+    if ($user['role'] !== 'ADMIN') {
+        jsonError('Only administrators can delete departments', 403);
     }
     
-    // Check if has children
-    $stmt = $pdo->prepare("SELECT COUNT(*) FROM departments WHERE parent_id = ? AND is_active = TRUE");
-    $stmt->execute([$_DELETE['id']]);
-    if ($stmt->fetchColumn() > 0) {
-        jsonError('Cannot delete department with sub-departments. Delete or move children first.');
+    $input = json_decode(file_get_contents('php://input'), true);
+    
+    if (empty($input['id'])) {
+        jsonError('Department ID is required', 400);
     }
     
-    // Check if has users
+    // Check if department exists
+    $stmt = $pdo->prepare("SELECT * FROM departments WHERE id = ?");
+    $stmt->execute([$input['id']]);
+    $department = $stmt->fetch();
+    
+    if (!$department) {
+        jsonError('Department not found', 404);
+    }
+    
+    // Check if department has users
     $stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE department_id = ? AND is_active = TRUE");
-    $stmt->execute([$_DELETE['id']]);
-    $userCount = $stmt->fetchColumn();
+    $stmt->execute([$input['id']]);
+    $userCount = (int)$stmt->fetchColumn();
     
-    if ($userCount > 0 && empty($_DELETE['force'])) {
-        jsonError("Department has $userCount active users. Set users to another department first, or use force=true to unassign them.");
+    if ($userCount > 0) {
+        jsonError("Cannot delete department with $userCount active users. Reassign users first.", 400);
     }
     
-    // Soft delete
-    $stmt = $pdo->prepare("UPDATE departments SET is_active = FALSE WHERE id = ?");
-    $stmt->execute([$_DELETE['id']]);
+    // Check if department has child departments
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM departments WHERE parent_id = ? AND is_active = TRUE");
+    $stmt->execute([$input['id']]);
+    $childCount = (int)$stmt->fetchColumn();
     
-    // Unassign users if forced
-    if ($userCount > 0 && !empty($_DELETE['force'])) {
-        $stmt = $pdo->prepare("UPDATE users SET department_id = NULL WHERE department_id = ?");
-        $stmt->execute([$_DELETE['id']]);
+    if ($childCount > 0) {
+        jsonError("Cannot delete department with $childCount child departments. Delete or reassign children first.", 400);
     }
     
-    // Log activity
-    logActivity($user['id'], 'department_deleted', 'department', $_DELETE['id'], "Deleted department");
-    
-    jsonResponse([
-        'success' => true,
-        'message' => 'Department deleted successfully'
-    ]);
-}
-
-/**
- * Build hierarchical tree structure
- */
-function buildTree($elements, $parentId = null) {
-    $branch = [];
-    
-    foreach ($elements as $element) {
-        if ($element['parent_id'] == $parentId) {
-            $children = buildTree($elements, $element['id']);
-            if ($children) {
-                $element['children'] = $children;
-            }
-            $branch[] = $element;
-        }
+    try {
+        // Soft delete
+        $stmt = $pdo->prepare("UPDATE departments SET is_active = FALSE, updated_at = NOW() WHERE id = ?");
+        $stmt->execute([$input['id']]);
+        
+        // Log activity
+        logActivity(
+            $user['id'],
+            'department_deleted',
+            'department',
+            $input['id'],
+            "Department '{$department['name']}' deleted",
+            null
+        );
+        
+        jsonResponse([
+            'success' => true,
+            'message' => 'Department deleted successfully'
+        ]);
+        
+    } catch (PDOException $e) {
+        error_log("Department delete error: " . $e->getMessage());
+        jsonError('Failed to delete department', 500);
     }
-    
-    return $branch;
 }

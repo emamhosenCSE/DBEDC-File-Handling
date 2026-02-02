@@ -63,8 +63,8 @@ php_value error_log error.log
 </IfModule>
 
 # Custom Error Pages (create these if needed)
-# ErrorDocument 404 /file-tracker/404.php
-# ErrorDocument 500 /file-tracker/500.php
+# ErrorDocument 404 /404.php
+# ErrorDocument 500 /500.php
 
 # Limit upload size (adjust as needed)
 php_value upload_max_filesize 10M
