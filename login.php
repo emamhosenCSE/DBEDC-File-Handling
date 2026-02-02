@@ -11,6 +11,9 @@
  * 6. Download JSON and add credentials below
  */
 
+require_once __DIR__ . '/includes/auth.php';
+ensureSystemInstalled();
+
 session_start();
 
 // Security Headers

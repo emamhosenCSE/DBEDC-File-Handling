@@ -4,10 +4,7 @@
  * Handles in-app notification operations
  */
 
-require_once __DIR__ . '/../includes/auth.php';
-require_once __DIR__ . '/../includes/notifications.php';
-ensureAuthenticated();
-ensureCSRFValid();
+require_once __DIR__ . '/../includes/api-bootstrap.php';
 
 $method = $_SERVER['REQUEST_METHOD'];
 $user = getCurrentUser();

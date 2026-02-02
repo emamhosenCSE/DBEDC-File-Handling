@@ -4,9 +4,7 @@
  * Provides statistical data for dashboard
  */
 
-require_once __DIR__ . '/../includes/auth.php';
-ensureAuthenticated();
-ensureCSRFValid();
+require_once __DIR__ . '/../includes/api-bootstrap.php';
 
 $type = $_GET['type'] ?? 'overview';
 

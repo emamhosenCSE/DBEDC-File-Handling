@@ -4,9 +4,7 @@
  * Handles CRUD operations for tasks
  */
 
-require_once __DIR__ . '/../includes/auth.php';
-ensureAuthenticated();
-ensureCSRFValid();
+require_once __DIR__ . '/../includes/api-bootstrap.php';
 
 // Set security headers
 setSecurityHeaders();

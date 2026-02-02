@@ -4,15 +4,9 @@
  * Handles automated task management, escalation, and workflow controls
  */
 
-require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/api-bootstrap.php';
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/workflow.php';
-require_once __DIR__ . '/../includes/permissions.php';
-
-header('Content-Type: application/json');
-
-// Verify user is authenticated
-$user = requireAuth();
 
 $method = $_SERVER['REQUEST_METHOD'];
 $action = $_GET['action'] ?? '';

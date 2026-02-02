@@ -4,15 +4,9 @@
  * Handles CRUD operations for letters with bulk support
  */
 
-require_once __DIR__ . '/../includes/auth.php';
-require_once __DIR__ . '/../includes/permissions.php';
+require_once __DIR__ . '/../includes/api-bootstrap.php';
 require_once __DIR__ . '/../includes/notifications.php';
 require_once __DIR__ . '/../includes/validation.php';
-ensureAuthenticated();
-ensureCSRFValid();
-
-// Set security headers
-setSecurityHeaders();
 
 $method = $_SERVER['REQUEST_METHOD'];
 $user = getCurrentUser();

@@ -4,10 +4,7 @@
  * Handles department CRUD operations with hierarchy support
  */
 
-require_once __DIR__ . '/../includes/auth.php';
-require_once __DIR__ . '/../includes/permissions.php';
-ensureAuthenticated();
-ensureCSRFValid();
+require_once __DIR__ . '/../includes/api-bootstrap.php';
 
 $method = $_SERVER['REQUEST_METHOD'];
 $user = getCurrentUser();

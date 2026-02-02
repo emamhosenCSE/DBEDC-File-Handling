@@ -4,13 +4,7 @@
  * Provides unified search across letters, tasks, stakeholders, departments, and users
  */
 
-require_once __DIR__ . '/../includes/auth.php';
-require_once __DIR__ . '/../includes/permissions.php';
-ensureAuthenticated();
-ensureCSRFValid();
-
-// Set security headers
-setSecurityHeaders();
+require_once __DIR__ . '/../includes/api-bootstrap.php';
 
 $query = trim($_GET['q'] ?? '');
 $limit = min((int)($_GET['limit'] ?? 10), 20); // Max 20 results

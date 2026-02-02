@@ -12,6 +12,41 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 
 /**
+ * Check if system is installed, redirect to installer if not
+ */
+function ensureSystemInstalled() {
+    if (!isSystemInstalled()) {
+        header('Location: install.php');
+        exit;
+    }
+}
+
+/**
+ * Check if the system has been installed
+ */
+function isSystemInstalled() {
+    // Try to connect to database
+    try {
+        // Check if database config exists
+        if (!file_exists(__DIR__ . '/db_config.php')) {
+            return false;
+        }
+
+        require_once __DIR__ . '/config.php';
+        require_once __DIR__ . '/db.php';
+
+        // Check if settings table exists and has installation flag
+        $stmt = $pdo->query("SELECT setting_value FROM settings WHERE setting_key = 'system_installed'");
+        $installed = $stmt->fetchColumn();
+
+        return $installed === '1';
+    } catch (Exception $e) {
+        // Database not set up or connection failed
+        return false;
+    }
+}
+
+/**
  * Set security headers for API responses
  */
 function setSecurityHeaders() {
