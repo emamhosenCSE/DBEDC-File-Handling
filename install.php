@@ -79,8 +79,13 @@ function handleDatabaseSetup() {
         // Check if tables already exist and offer to clear them
         $stmt = $pdo->query("SHOW TABLES LIKE 'settings'");
         if ($stmt->rowCount() > 0) {
-            // Drop all existing tables
-            $tables = $pdo->query("SHOW TABLES")->fetchAll(PDO::FETCH_COLUMN);
+            // Drop all existing tables in correct order (child tables first)
+            $tables = [
+                'task_updates', 'push_subscriptions', 'email_queue', 'notifications',
+                'activities', 'tasks', 'user_preferences', 'users', 'letters',
+                'departments', 'stakeholders', 'settings'
+            ];
+
             foreach ($tables as $table) {
                 $pdo->exec("DROP TABLE IF EXISTS `$table`");
             }
@@ -353,11 +358,6 @@ function handleFinalSetup() {
     } catch (Exception $e) {
         $error = 'Final setup failed: ' . $e->getMessage();
     }
-}
-
-function generateULID() {
-    // Simple ULID-like generator
-    return strtoupper(bin2hex(random_bytes(16)));
 }
 
 function renderStep($step) {
