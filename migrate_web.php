@@ -23,24 +23,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ]);
 
             // Read migration file
-            $migrationSQL = file_get_contents(__DIR__ . '/sql/migration_v2.sql');
+            $migrationSQL = file_get_contents(__DIR__ . '/sql/migration_v2_clean.sql');
             if (!$migrationSQL) {
                 throw new Exception("Could not read migration file");
             }
 
-            // Use mysqli for better DELIMITER handling
+            // Use mysqli for execution (cleaned SQL doesn't need DELIMITER handling)
             $mysqli = new mysqli($host, $user, $pass, $dbName);
             if ($mysqli->connect_error) {
                 throw new Exception('Connection failed: ' . $mysqli->connect_error);
             }
             $mysqli->set_charset('utf8mb4');
 
-            // Simple approach: remove DELIMITER lines and execute
-            $cleanSQL = preg_replace('/^DELIMITER.*$/im', '', $migrationSQL);
-            $cleanSQL = preg_replace('/END\s*\/\//i', 'END', $cleanSQL);
-
-            // Split by semicolon
-            $statements = array_filter(array_map('trim', explode(';', $cleanSQL)));
+            // Split by semicolon and execute each statement
+            $statements = array_filter(array_map('trim', explode(';', $migrationSQL)));
 
             $executed = 0;
             $errors = 0;
@@ -134,10 +130,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <p>If the web tool doesn't work, try these command-line approaches:</p>
 
     <h3>Method 1: Direct MySQL Import</h3>
-    <pre>mysql -u username -p database_name < sql/migration_v2.sql</pre>
+    <pre>mysql -u username -p database_name < sql/migration_v2_clean.sql</pre>
 
     <h3>Method 2: Using the PHP Script</h3>
-    <pre>php run_migration_production.php host database username password</pre>
+    <pre>php run_migration_production.php</pre>
 
     <p><strong>Note:</strong> After successful migration, delete this file for security reasons.</p>
 </body>
