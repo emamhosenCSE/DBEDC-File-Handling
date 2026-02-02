@@ -3685,22 +3685,32 @@ function editProfile() {
 }
 
 function showToast(message, type = 'info') {
-    const container = document.getElementById('toast-container');
+    // Remove existing toasts
+    const existingToasts = document.querySelectorAll('.toast');
+    existingToasts.forEach(toast => toast.remove());
+
     const toast = document.createElement('div');
-    toast.className = `toast ${type}`;
+    toast.className = `toast toast-${type}`;
+    toast.setAttribute('role', 'alert');
+    toast.setAttribute('aria-live', 'assertive');
+
+    const icon = type === 'success' ? '✓' : type === 'error' ? '✕' : type === 'warning' ? '⚠' : 'ℹ';
+
     toast.innerHTML = `
-        <div style="flex: 1;">${message}</div>
-        <button class="btn-icon" onclick="this.parentElement.remove()">
-            <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
-            </svg>
-        </button>
+        <div class="toast-content">
+            <span class="toast-icon">${icon}</span>
+            <span class="toast-message">${message}</span>
+            <button class="toast-close" onclick="this.parentElement.parentElement.remove()" aria-label="Close notification">×</button>
+        </div>
     `;
-    
-    container.appendChild(toast);
-    
+
+    document.body.appendChild(toast);
+
+    // Auto remove after 5 seconds
     setTimeout(() => {
-        toast.remove();
+        if (toast.parentElement) {
+            toast.remove();
+        }
     }, 5000);
 }
 
