@@ -335,9 +335,23 @@ try {
         ]); ?>;
     </script>
 
-    <!-- Main Application Script -->
-    <script src="assets/js/app.js?v=2.0"></script>
-    
+    <!-- Third-party Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Application Scripts -->
+    <script src="assets/js/api.js?v=2.0"></script>
+    <script src="assets/js/ui.js?v=2.0"></script>
+    <script src="assets/js/search.js?v=2.0"></script>
+    <script src="assets/js/upload.js?v=2.0"></script>
+    <script src="assets/js/views.js?v=2.0"></script>
+    <script src="assets/js/letters.js?v=2.0"></script>
+    <script src="assets/js/tasks.js?v=2.0"></script>
+    <script src="assets/js/stakeholders.js?v=2.0"></script>
+    <script src="assets/js/analytics.js?v=2.0"></script>
+    <script src="assets/js/reports.js?v=2.0"></script>
+    <script src="assets/js/settings.js?v=2.0"></script>
+    <script src="assets/js/main.js?v=2.0"></script>
+
     <!-- Register Service Worker for PWA -->
     <script>
         if ('serviceWorker' in navigator) {
