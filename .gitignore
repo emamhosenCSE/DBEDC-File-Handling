@@ -31,6 +31,3 @@ Thumbs.db
 # Node modules (if any)
 node_modules/
 
-# Test files
-test_*.php
-*_test.php
