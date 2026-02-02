@@ -80,7 +80,13 @@ function isSystemInstalled() {
         }
 
         require_once __DIR__ . '/includes/db_config.php';
-        require_once __DIR__ . '/includes/db.php';
+        
+        // Create database connection directly
+        $pdo = new PDO("mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=utf8mb4", DB_USER, DB_PASS, [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        ]);
+        
         $stmt = $pdo->query("SELECT setting_value FROM settings WHERE setting_key = 'system_installed'");
         return $stmt->fetchColumn() === '1';
     } catch (Exception $e) {
