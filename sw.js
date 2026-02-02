@@ -9,9 +9,7 @@ const urlsToCache = [
     '/assets/css/app.css',
     '/assets/js/app.js',
     '/login.php',
-    '/manifest.json',
-    '/assets/icon-192.png',
-    '/assets/icon-512.png'
+    '/manifest.json'
 ];
 
 // Install event - cache resources

@@ -169,143 +169,129 @@ async function loadView(view) {
 
 // ===== DASHBOARD VIEW =====
 async function renderDashboard() {
-    const [stats, recentLetters, myTasks, activities, calendarData] = await Promise.all([
-        API.get('api/analytics.php?type=overview'),
-        API.get('api/letters.php?limit=5'),
-        API.get('api/tasks.php?view=my&status=PENDING&limit=5'),
-        API.get('api/activities.php?limit=10'),
-        API.get('api/letters.php?calendar=true')
-    ]);
-    
-    const urgentTasks = myTasks.tasks?.filter(t => t.priority === 'URGENT' || t.priority === 'HIGH') || [];
-    
-    const html = `
-        <div class="dashboard">
-            <!-- Stats Cards -->
-            <div class="stats-grid">
-                <div class="stat-card" onclick="switchTab('letters')">
-                    <div class="stat-icon" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
-                        <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clip-rule="evenodd"/>
-                        </svg>
+    try {
+        const [stats, recentLetters, myTasks, activities, calendarData] = await Promise.allSettled([
+            API.get('api/analytics.php?type=overview'),
+            API.get('api/letters.php?limit=5'),
+            API.get('api/tasks.php?view=my&status=PENDING&limit=5'),
+            API.get('api/activities.php?limit=10'),
+            API.get('api/letters.php?calendar=true')
+        ]);
+        
+        const statsData = stats.status === 'fulfilled' ? stats.value : { letters: { total: 0 }, tasks: { pending: 0 }, avg_completion_days: '-' };
+        const lettersData = recentLetters.status === 'fulfilled' ? recentLetters.value : { letters: [] };
+        const tasksData = myTasks.status === 'fulfilled' ? myTasks.value : { tasks: [] };
+        const activitiesData = activities.status === 'fulfilled' ? activities.value : { activities: [] };
+        const calendarInfo = calendarData.status === 'fulfilled' ? calendarData.value : { letters: [] };
+        
+        const urgentTasks = (tasksData.tasks || []).filter(t => t.priority === 'URGENT' || t.priority === 'HIGH') || [];
+        
+        const html = `
+            <div class="dashboard">
+                <div class="stats-grid">
+                    <div class="stat-card" onclick="switchTab('letters')">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                            <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clip-rule="evenodd"/>
+                            </svg>
+                        </div>
+                        <div class="stat-value">${statsData.letters?.total || 0}</div>
+                        <div class="stat-label">Total Letters</div>
                     </div>
-                    <div class="stat-value">${stats.letters?.total || 0}</div>
-                    <div class="stat-label">Total Letters</div>
-                </div>
-                
-                <div class="stat-card" onclick="switchTab('my-tasks')">
-                    <div class="stat-icon" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
-                        <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20">
-                            <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/>
-                            <path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 011-1h4a1 1 0 110 2H8a1 1 0 01-1-1z" clip-rule="evenodd"/>
-                        </svg>
+                    
+                    <div class="stat-card" onclick="switchTab('my-tasks')">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                            <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/>
+                                <path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 011-1h4a1 1 0 110 2H8a1 1 0 01-1-1z" clip-rule="evenodd"/>
+                            </svg>
+                        </div>
+                        <div class="stat-value">${statsData.tasks?.pending || 0}</div>
+                        <div class="stat-label">Pending Tasks</div>
                     </div>
-                    <div class="stat-value">${stats.tasks?.pending || 0}</div>
-                    <div class="stat-label">Pending Tasks</div>
-                </div>
-                
-                <div class="stat-card">
-                    <div class="stat-icon" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
-                        <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/>
-                        </svg>
+                    
+                    <div class="stat-card">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                            <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/>
+                            </svg>
+                        </div>
+                        <div class="stat-value">${statsData.avg_completion_days || '-'}</div>
+                        <div class="stat-label">Avg. Completion (days)</div>
                     </div>
-                    <div class="stat-value">${stats.avg_completion_days || '-'}</div>
-                    <div class="stat-label">Avg. Completion (days)</div>
-                </div>
-                
-                <div class="stat-card" style="cursor: default;">
-                    <div class="stat-icon urgent" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">
-                        <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
-                        </svg>
-                    </div>
-                    <div class="stat-value">${urgentTasks.length}</div>
-                    <div class="stat-label">Urgent Tasks</div>
-                </div>
-            </div>
-            
-            <!-- Quick Actions -->
-            <div class="quick-actions">
-                <h3>Quick Actions</h3>
-                <div class="quick-actions-grid">
-                    <button class="quick-action-btn" onclick="showAddLetterModal()">
-                        <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/>
-                        </svg>
-                        <span>Add Letter</span>
-                    </button>
-                    <button class="quick-action-btn" onclick="switchTab('letters'); App.viewMode = 'grid'; refreshCurrentView();">
-                        <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20">
-                            <path d="M2 4a1 1 0 011-1h5a1 1 0 011 1v12a1 1 0 01-1 1H3a1 1 0 01-1-1V4zM8 7a1 1 0 011-1h9a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7z"/>
-                            <path d="M14 4a1 1 0 011-1h3a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1V4z"/>
-                        </svg>
-                        <span>Grid View</span>
-                    </button>
-                    <button class="quick-action-btn" onclick="showBulkImportModal()">
-                        <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
-                        </svg>
-                        <span>Bulk Import</span>
-                    </button>
-                    <button class="quick-action-btn" onclick="exportLetters()">
-                        <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/>
-                        </svg>
-                        <span>Export Data</span>
-                    </button>
-                </div>
-            </div>
-            
-            <!-- Main Dashboard Grid -->
-            <div class="dashboard-grid">
-                <!-- Recent Letters -->
-                <div class="card">
-                    <div class="card-header">
-                        <h3 class="card-title">Recent Letters</h3>
-                        <button class="btn btn-secondary btn-sm" onclick="switchTab('letters')">View All</button>
-                    </div>
-                    <div class="card-body">
-                        ${renderRecentItemsList(recentLetters.letters || [], 'letter')}
+                    
+                    <div class="stat-card" style="cursor: default;">
+                        <div class="stat-icon urgent" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">
+                            <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                            </svg>
+                        </div>
+                        <div class="stat-value">${urgentTasks.length}</div>
+                        <div class="stat-label">Urgent Tasks</div>
                     </div>
                 </div>
                 
-                <!-- My Pending Tasks -->
-                <div class="card">
-                    <div class="card-header">
-                        <h3 class="card-title">My Pending Tasks</h3>
-                        <button class="btn btn-secondary btn-sm" onclick="switchTab('my-tasks')">View All</button>
-                    </div>
-                    <div class="card-body">
-                        ${renderTaskList(myTasks.tasks || [])}
+                <div class="quick-actions">
+                    <h3>Quick Actions</h3>
+                    <div class="quick-actions-grid">
+                        <button class="quick-action-btn" onclick="showAddLetterModal()">
+                            <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/>
+                            </svg>
+                            <span>Add Letter</span>
+                        </button>
+                        <button class="quick-action-btn" onclick="showBulkImportModal()">
+                            <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                            <span>Bulk Import</span>
+                        </button>
+                        <button class="quick-action-btn" onclick="exportLetters()">
+                            <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                            </svg>
+                            <span>Export Data</span>
+                        </button>
                     </div>
                 </div>
                 
-                <!-- Calendar Preview -->
-                <div class="card">
-                    <div class="card-header">
-                        <h3 class="card-title">Calendar</h3>
+                <div class="dashboard-grid">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">Recent Letters</h3>
+                            <button class="btn btn-secondary btn-sm" onclick="switchTab('letters')">View All</button>
+                        </div>
+                        <div class="card-body">
+                            ${renderRecentItemsList(lettersData.letters || [], 'letter')}
+                        </div>
                     </div>
-                    <div class="card-body">
-                        ${renderMiniCalendar(calendarData)}
-                    </div>
-                </div>
-                
-                <!-- Activity Timeline -->
-                <div class="card">
-                    <div class="card-header">
-                        <h3 class="card-title">Recent Activity</h3>
-                        <button class="btn btn-secondary btn-sm" onclick="switchTab('notifications')">View All</button>
-                    </div>
-                    <div class="card-body">
-                        ${renderActivityTimeline(activities.activities || [])}
+                    
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">My Pending Tasks</h3>
+                            <button class="btn btn-secondary btn-sm" onclick="switchTab('my-tasks')">View All</button>
+                        </div>
+                        <div class="card-body">
+                            ${renderTaskList(tasksData.tasks || [])}
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
-    `;
-    
-    document.getElementById('app-content').innerHTML = html;
+        `;
+        
+        document.getElementById('app-content').innerHTML = html;
+    } catch (error) {
+        console.error('Dashboard error:', error);
+        document.getElementById('app-content').innerHTML = `
+            <div class="card">
+                <div class="text-center">
+                    <h3>Welcome to DBEDC File Tracker</h3>
+                    <p class="text-muted">Please run the database migration to initialize the system.</p>
+                    <a href="sql/migration_v2.sql" target="_blank" class="btn btn-primary">View Migration SQL</a>
+                </div>
+            </div>
+        `;
+    }
 }
 
 function renderRecentItemsList(items, type) {
