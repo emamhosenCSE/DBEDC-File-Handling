@@ -6,6 +6,9 @@
 
 session_start();
 
+// Include database functions (needed for generateULID)
+require_once __DIR__ . '/includes/db.php';
+
 // Create config.php if it doesn't exist but database is configured
 if (!file_exists(__DIR__ . '/includes/config.php') && file_exists(__DIR__ . '/includes/db_config.php')) {
     $configContent = "<?php
