@@ -1,6 +1,4 @@
-# Sensitive configuration files
-includes/config.php
-includes/db_config.php
+
 
 # Environment files
 .env
