@@ -247,9 +247,10 @@ function handleEmailSetup() {
             ['smtp_from_name', $fromName, 'email']
         ];
         
-        $stmt = $pdo->prepare("INSERT INTO settings (setting_key, setting_value, setting_group) VALUES (?, ?, ?)");
+        $stmt = $pdo->prepare("INSERT INTO settings (id, setting_key, setting_value, setting_group) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)");
         foreach ($settings as $setting) {
-            $stmt->execute($setting);
+            $id = generateULID();
+            $stmt->execute([$id, $setting[0], $setting[1], $setting[2]]);
         }
         
         $success = 'Email configuration saved successfully!';
