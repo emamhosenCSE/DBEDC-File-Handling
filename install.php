@@ -59,7 +59,7 @@ define('APP_DEBUG', getenv('APP_DEBUG') ?: true);
 }
 
 // Prevent access if already installed
-if (isset($_SESSION['user_id']) || (isset($_GET['check']) && isSystemInstalled())) {
+if (isset($_SESSION['user_id']) || isSystemInstalled()) {
     header('Location: dashboard.php');
     exit;
 }
@@ -146,16 +146,25 @@ define('DB_PASS', '" . addslashes($pass) . "');
         // Check if tables already exist and offer to clear them
         $stmt = $pdo->query("SHOW TABLES LIKE 'settings'");
         if ($stmt->rowCount() > 0) {
-            // Drop all existing tables in correct order (child tables first)
-            $tables = [
-                'task_updates', 'push_subscriptions', 'email_queue', 'notifications',
-                'activities', 'tasks', 'user_preferences', 'users', 'letters',
-                'departments', 'stakeholders', 'settings'
-            ];
-
+            // Disable foreign key checks temporarily
+            $pdo->exec("SET FOREIGN_KEY_CHECKS = 0");
+            
+            // Drop all views first
+            $stmt = $pdo->query("SHOW FULL TABLES WHERE Table_type = 'VIEW'");
+            $views = $stmt->fetchAll(PDO::FETCH_COLUMN);
+            foreach ($views as $view) {
+                $pdo->exec("DROP VIEW IF EXISTS `$view`");
+            }
+            
+            // Drop all tables
+            $stmt = $pdo->query("SHOW TABLES");
+            $tables = $stmt->fetchAll(PDO::FETCH_COLUMN);
             foreach ($tables as $table) {
                 $pdo->exec("DROP TABLE IF EXISTS `$table`");
             }
+            
+            // Re-enable foreign key checks
+            $pdo->exec("SET FOREIGN_KEY_CHECKS = 1");
         }
         
         // Run migration (use cleaned version)
