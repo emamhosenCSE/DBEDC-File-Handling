@@ -225,6 +225,11 @@ function handleOAuthSetup() {
         require_once __DIR__ . '/includes/db_config.php';
         require_once __DIR__ . '/includes/db.php';
         
+        global $pdo;
+        if (!isset($pdo) || $pdo === null) {
+            throw new Exception('Database connection not available');
+        }
+        
         // Save OAuth settings
         $settings = [
             ['google_client_id', $clientId, 'auth'],
