@@ -94,7 +94,14 @@ function isSystemInstalled() {
         ]);
         
         $stmt = $pdo->query("SELECT setting_value FROM settings WHERE setting_key = 'system_installed'");
-        return $stmt->fetchColumn() === '1';
+        $installed = $stmt->fetchColumn();
+        
+        // If database shows installed but flag file doesn't exist, create it
+        if ($installed === '1' && !file_exists(__DIR__ . '/.installed')) {
+            file_put_contents(__DIR__ . '/.installed', 'installed');
+        }
+        
+        return $installed === '1';
     } catch (Exception $e) {
         return false;
     }
