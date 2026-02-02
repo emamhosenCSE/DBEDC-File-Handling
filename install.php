@@ -76,11 +76,14 @@ function handleDatabaseSetup() {
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         ]);
         
-        // Check if tables already exist
+        // Check if tables already exist and offer to clear them
         $stmt = $pdo->query("SHOW TABLES LIKE 'settings'");
         if ($stmt->rowCount() > 0) {
-            $error = 'Database already contains tables. Please use an empty database.';
-            return;
+            // Drop all existing tables
+            $tables = $pdo->query("SHOW TABLES")->fetchAll(PDO::FETCH_COLUMN);
+            foreach ($tables as $table) {
+                $pdo->exec("DROP TABLE IF EXISTS `$table`");
+            }
         }
         
         // Save database config
@@ -93,8 +96,8 @@ define('DB_PASS', '" . addslashes($pass) . "');
         
         file_put_contents(__DIR__ . '/includes/db_config.php', $configContent);
         
-        // Run migration
-        $migration = file_get_contents(__DIR__ . '/sql/migration_v2.sql');
+        // Run migration (use cleaned version)
+        $migration = file_get_contents(__DIR__ . '/sql/migration.sql');
         $pdo->exec($migration);
         
         $success = 'Database setup completed successfully!';
