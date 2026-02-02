@@ -1,6 +1,6 @@
 <?php
 // Test the activities API directly
-require_once '../includes/api-bootstrap.php';
+require_once 'includes/api-bootstrap.php';
 
 $user = getCurrentUser();
 echo "Current user: " . json_encode($user) . "\n";
