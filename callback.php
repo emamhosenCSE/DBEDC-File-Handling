@@ -9,6 +9,11 @@ require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/config.php';
 
+// Cache Control Headers - Disable all caching for OAuth callback
+header("Cache-Control: no-cache, no-store, must-revalidate");
+header("Pragma: no-cache");
+header("Expires: 0");
+
 // Error handling
 if (isset($_GET['error'])) {
     die('Google OAuth Error: ' . htmlspecialchars($_GET['error']));

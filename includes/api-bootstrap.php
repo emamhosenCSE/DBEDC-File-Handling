@@ -22,3 +22,8 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET' && $_SERVER['REQUEST_METHOD'] !== 'HEAD
 // Get current user for API operations
 $user = getCurrentUser();
 $method = $_SERVER['REQUEST_METHOD'];
+
+// Cache Control Headers - Disable all caching for API responses
+header("Cache-Control: no-cache, no-store, must-revalidate");
+header("Pragma: no-cache");
+header("Expires: 0");

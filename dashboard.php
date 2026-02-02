@@ -19,6 +19,11 @@ header("X-XSS-Protection: 1; mode=block");
 header("Referrer-Policy: strict-origin-when-cross-origin");
 header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self'");
 
+// Cache Control Headers - Disable all caching
+header("Cache-Control: no-cache, no-store, must-revalidate");
+header("Pragma: no-cache");
+header("Expires: 0");
+
 // Get branding settings
 try {
     $stmt = $pdo->query("SELECT setting_key, setting_value FROM settings WHERE setting_group = 'branding' AND is_public = TRUE");
@@ -31,6 +36,9 @@ $companyName = $branding['company_name'] ?? getSystemConfig('company_name', 'Fil
 $companyLogo = $branding['company_logo'] ?? null;
 $primaryColor = $branding['primary_color'] ?? getSystemConfig('primary_color', '#667eea');
 $secondaryColor = $branding['secondary_color'] ?? getSystemConfig('secondary_color', '#764ba2');
+
+// Cache busting timestamp
+$cacheBust = time();
 
 // Get stakeholders for forms
 try {
@@ -71,6 +79,12 @@ try {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="<?php echo htmlspecialchars($primaryColor); ?>">
+    
+    <!-- Cache Control Meta Tags -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    
     <title><?php echo htmlspecialchars($companyName); ?> - Dashboard</title>
     
     <!-- PWA Manifest -->
@@ -88,7 +102,7 @@ try {
     </style>
     
     <!-- Styles -->
-    <link rel="stylesheet" href="assets/css/app.css?v=2.0">
+    <link rel="stylesheet" href="assets/css/app.css?v=<?php echo $cacheBust; ?>">
 </head>
 <body>
     
@@ -339,18 +353,18 @@ try {
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <!-- Application Scripts -->
-    <script src="assets/js/api.js?v=2.0"></script>
-    <script src="assets/js/ui.js?v=2.0"></script>
-    <script src="assets/js/search.js?v=2.0"></script>
-    <script src="assets/js/upload.js?v=2.0"></script>
-    <script src="assets/js/views.js?v=2.0"></script>
-    <script src="assets/js/letters.js?v=2.0"></script>
-    <script src="assets/js/tasks.js?v=2.0"></script>
-    <script src="assets/js/stakeholders.js?v=2.0"></script>
-    <script src="assets/js/analytics.js?v=2.0"></script>
-    <script src="assets/js/reports.js?v=2.0"></script>
-    <script src="assets/js/settings.js?v=2.0"></script>
-    <script src="assets/js/main.js?v=2.0"></script>
+    <script src="assets/js/api.js?v=<?php echo $cacheBust; ?>"></script>
+    <script src="assets/js/ui.js?v=<?php echo $cacheBust; ?>"></script>
+    <script src="assets/js/search.js?v=<?php echo $cacheBust; ?>"></script>
+    <script src="assets/js/upload.js?v=<?php echo $cacheBust; ?>"></script>
+    <script src="assets/js/views.js?v=<?php echo $cacheBust; ?>"></script>
+    <script src="assets/js/letters.js?v=<?php echo $cacheBust; ?>"></script>
+    <script src="assets/js/tasks.js?v=<?php echo $cacheBust; ?>"></script>
+    <script src="assets/js/stakeholders.js?v=<?php echo $cacheBust; ?>"></script>
+    <script src="assets/js/analytics.js?v=<?php echo $cacheBust; ?>"></script>
+    <script src="assets/js/reports.js?v=<?php echo $cacheBust; ?>"></script>
+    <script src="assets/js/settings.js?v=<?php echo $cacheBust; ?>"></script>
+    <script src="assets/js/main.js?v=<?php echo $cacheBust; ?>"></script>
 
     <!-- Register Service Worker for PWA -->
     <script>

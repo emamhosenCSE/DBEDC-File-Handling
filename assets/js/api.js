@@ -10,9 +10,12 @@ const API = {
             headers: {
                 'Content-Type': 'application/json',
                 'X-CSRF-Token': App.csrfToken,
+                'Cache-Control': 'no-cache',
+                'Pragma': 'no-cache',
                 ...options.headers
             },
             credentials: 'same-origin', // Include cookies for session
+            cache: 'no-store', // Disable fetch caching
             ...options
         };
 
