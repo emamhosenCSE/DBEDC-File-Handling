@@ -11,9 +11,9 @@
 
 // PRODUCTION CREDENTIALS (update these)
 define('DB_HOST', 'localhost');
-define('DB_NAME', 'your_database_name');
-define('DB_USER', 'your_database_user');
-define('DB_PASS', 'your_database_password');
+define('DB_NAME', 'aeos365_dbedc_filetracker');
+define('DB_USER', 'aeos365_emamhosen');
+define('DB_PASS', 'jarvisMJ@321');
 
 // Development mode (set to false in production)
 define('DEV_MODE', true);
