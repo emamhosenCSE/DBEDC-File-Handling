@@ -73,6 +73,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 function isSystemInstalled() {
+    // Check for installation flag file (more reliable than database query)
+    if (file_exists(__DIR__ . '/.installed')) {
+        return true;
+    }
+    
+    // Fallback to database check
     try {
         // Check if db_config.php exists (created during database setup)
         if (!file_exists(__DIR__ . '/includes/db_config.php')) {
@@ -416,6 +422,9 @@ function handleFinalSetup() {
         
         // Mark system as installed
         $stmt->execute(['system_installed', '1', 'system']);
+        
+        // Create installation flag file for reliable detection
+        file_put_contents(__DIR__ . '/.installed', 'installed');
         
         // Create config.php file with OAuth settings
         $configContent = file_get_contents(__DIR__ . '/includes/config.php.template');

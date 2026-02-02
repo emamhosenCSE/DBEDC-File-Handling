@@ -25,7 +25,12 @@ function ensureSystemInstalled() {
  * Check if the system has been installed
  */
 function isSystemInstalled() {
-    // Try to connect to database
+    // Check for installation flag file (more reliable than database query)
+    if (file_exists(__DIR__ . '/../.installed')) {
+        return true;
+    }
+    
+    // Fallback to database check
     try {
         // Check if database config exists
         if (!file_exists(__DIR__ . '/db_config.php')) {
