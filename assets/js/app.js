@@ -3738,8 +3738,6 @@ document.addEventListener('click', (e) => {
     }
 });
 
-    }
-}
 
 // ===== DRAG & DROP FILE UPLOAD =====
 const FileUpload = {
