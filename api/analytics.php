@@ -40,6 +40,9 @@ switch ($type) {
     case 'recent_activity':
         getRecentActivity();
         break;
+    case 'monthly_trend':
+        getMonthlyTrend();
+        break;
     default:
         jsonError('Invalid analytics type');
 }
@@ -227,4 +230,53 @@ function getRecentActivity() {
     $stmt->execute([$limit]);
     
     jsonResponse($stmt->fetchAll());
+}
+
+/**
+ * Monthly trend data
+ */
+function getMonthlyTrend() {
+    global $pdo;
+    
+    // Get monthly letter and task counts for the last 12 months
+    $stmt = $pdo->query("
+        SELECT 
+            DATE_FORMAT(created_at, '%Y-%m') as month,
+            COUNT(DISTINCT CASE WHEN entity_type = 'letter' THEN entity_id END) as letters,
+            COUNT(DISTINCT CASE WHEN entity_type = 'task' THEN entity_id END) as tasks
+        FROM activities 
+        WHERE created_at >= DATE_SUB(NOW(), INTERVAL 12 MONTH)
+        GROUP BY DATE_FORMAT(created_at, '%Y-%m')
+        ORDER BY month
+    ");
+    
+    $data = $stmt->fetchAll();
+    
+    // Fill in missing months with zeros
+    $result = [];
+    $current = new DateTime();
+    for ($i = 11; $i >= 0; $i--) {
+        $month = $current->format('Y-m');
+        $found = false;
+        foreach ($data as $row) {
+            if ($row['month'] === $month) {
+                $result[] = $row;
+                $found = true;
+                break;
+            }
+        }
+        if (!$found) {
+            $result[] = [
+                'month' => $month,
+                'letters' => 0,
+                'tasks' => 0
+            ];
+        }
+        $current->modify('-1 month');
+    }
+    
+    // Reverse to show chronological order
+    $result = array_reverse($result);
+    
+    jsonResponse($result);
 }

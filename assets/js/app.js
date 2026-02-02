@@ -380,6 +380,9 @@ const API = {
     },
 
     upload(endpoint, formData, showLoading = true) {
+        // Add CSRF token to FormData
+        formData.append('csrf_token', App.csrfToken);
+        
         if (showLoading) Loading.show();
         return this.request(endpoint, {
             method: 'POST',

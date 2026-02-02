@@ -218,7 +218,7 @@ function verifyCSRFToken($token) {
 function ensureCSRFValid() {
     $method = $_SERVER['REQUEST_METHOD'];
     if (in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'])) {
-        $token = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
+        $token = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? $_POST['csrf_token'] ?? '';
         if (!verifyCSRFToken($token)) {
             jsonError('Invalid CSRF token', 403);
         }
