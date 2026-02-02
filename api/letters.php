@@ -7,7 +7,12 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/permissions.php';
 require_once __DIR__ . '/../includes/notifications.php';
+require_once __DIR__ . '/../includes/validation.php';
 ensureAuthenticated();
+ensureCSRFValid();
+
+// Set security headers
+setSecurityHeaders();
 
 $method = $_SERVER['REQUEST_METHOD'];
 $user = getCurrentUser();
@@ -46,7 +51,8 @@ switch ($method) {
  * GET - Fetch letters with optional filters
  */
 function handleGet() {
-    global $pdo, $user;
+    try {
+        global $pdo, $user;
     
     // Handle export
     if (isset($_GET['export'])) {
@@ -221,6 +227,13 @@ function handleGet() {
             'total_pages' => ceil($totalRecords / $perPage)
         ]
     ]);
+    } catch (PDOException $e) {
+        error_log("Letters GET error: " . $e->getMessage());
+        jsonError('Failed to fetch letters', 500);
+    } catch (Exception $e) {
+        error_log("Letters GET unexpected error: " . $e->getMessage());
+        jsonError('An unexpected error occurred', 500);
+    }
 }
 
 /**
@@ -250,24 +263,30 @@ function handlePost() {
         }
     }
     
-    // Validate required fields
-    $required = ['reference_no', 'stakeholder_id', 'subject', 'received_date'];
-    foreach ($required as $field) {
-        if (empty($_POST[$field])) {
-            jsonError("Field '$field' is required");
-        }
+    // Validate required fields using new validation functions
+    try {
+        $referenceNo = validateString($_POST['reference_no'] ?? '', 100, true);
+        $stakeholderId = validateULID($_POST['stakeholder_id'] ?? '', true);
+        $subject = validateString($_POST['subject'] ?? '', 500, true);
+        $receivedDate = validateDate($_POST['received_date'] ?? '', true);
+        $description = validateString($_POST['description'] ?? '', 2000);
+        $priority = validateEnum($_POST['priority'] ?? 'MEDIUM', ['LOW', 'MEDIUM', 'HIGH', 'URGENT']);
+        $departmentId = isset($_POST['department_id']) ? validateULID($_POST['department_id']) : null;
+        $tencentDocUrl = isset($_POST['tencent_doc_url']) ? validateUrl($_POST['tencent_doc_url']) : null;
+    } catch (Exception $e) {
+        jsonError($e->getMessage());
     }
     
     // Check for duplicate reference number
     $stmt = $pdo->prepare("SELECT id FROM letters WHERE reference_no = ?");
-    $stmt->execute([$_POST['reference_no']]);
+    $stmt->execute([$referenceNo]);
     if ($stmt->fetch()) {
         jsonError('A letter with this reference number already exists');
     }
     
     // Validate stakeholder exists
     $stmt = $pdo->prepare("SELECT id FROM stakeholders WHERE id = ? AND is_active = TRUE");
-    $stmt->execute([$_POST['stakeholder_id']]);
+    $stmt->execute([$stakeholderId]);
     if (!$stmt->fetch()) {
         jsonError('Invalid stakeholder');
     }
@@ -283,17 +302,17 @@ function handlePost() {
         
         $stmt->execute([
             $letterId,
-            $_POST['reference_no'],
-            $_POST['stakeholder_id'],
-            $_POST['subject'],
-            $_POST['description'] ?? null,
+            $referenceNo,
+            $stakeholderId,
+            $subject,
+            $description,
             $pdfFilename,
             $pdfOriginalName,
             $pdfSize,
-            $_POST['tencent_doc_url'] ?? null,
-            $_POST['received_date'],
-            $_POST['priority'] ?? 'MEDIUM',
-            $_POST['department_id'] ?? $user['department_id'],
+            $tencentDocUrl,
+            $receivedDate,
+            $priority,
+            $departmentId,
             $tags,
             $user['id']
         ]);

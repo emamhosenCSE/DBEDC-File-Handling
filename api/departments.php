@@ -7,6 +7,7 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/permissions.php';
 ensureAuthenticated();
+ensureCSRFValid();
 
 $method = $_SERVER['REQUEST_METHOD'];
 $user = getCurrentUser();

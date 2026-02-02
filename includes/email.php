@@ -5,21 +5,24 @@
  */
 
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/system-config.php';
 
 /**
  * Email configuration from settings
  */
 function getEmailConfig() {
     global $pdo;
-    
+
+    $defaults = getEmailDefaults();
+
     $config = [
-        'host' => 'smtp.gmail.com',
-        'port' => 587,
-        'secure' => 'tls',
+        'host' => $defaults['host'],
+        'port' => $defaults['port'],
+        'secure' => $defaults['secure'],
         'username' => '',
         'password' => '',
-        'from_email' => 'noreply@dhakabypass.com',
-        'from_name' => 'DBEDC File Tracker'
+        'from_email' => $defaults['from_email'],
+        'from_name' => $defaults['from_name']
     ];
     
     try {
@@ -299,12 +302,18 @@ function processEmailQueue($limit = 10) {
  * Email templates
  */
 function getEmailTemplate($template, $data) {
+    // Get system configuration for dynamic branding
+    $systemConfig = getSystemConfig();
+    $companyName = $systemConfig['company_name'] ?? 'File Tracker';
+    $primaryColor = $systemConfig['primary_color'] ?? '#667eea';
+    $secondaryColor = $systemConfig['secondary_color'] ?? '#764ba2';
+    
     $templates = [
         'task_assigned' => [
             'subject' => 'New Task Assigned: {task_title}',
             'body' => '
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; text-align: center;">
+                    <div style="background: linear-gradient(135deg, ' . $primaryColor . ' 0%, ' . $secondaryColor . ' 100%); padding: 20px; text-align: center;">
                         <h1 style="color: white; margin: 0;">New Task Assigned</h1>
                     </div>
                     <div style="padding: 20px; background: #f9fafb;">
@@ -316,10 +325,10 @@ function getEmailTemplate($template, $data) {
                             <p style="margin: 5px 0; color: #6b7280;"><strong>Priority:</strong> {priority}</p>
                             <p style="margin: 5px 0; color: #6b7280;"><strong>Due Date:</strong> {due_date}</p>
                         </div>
-                        <a href="{action_url}" style="display: inline-block; background: #667eea; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">View Task</a>
+                        <a href="{action_url}" style="display: inline-block; background: ' . $primaryColor . '; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">View Task</a>
                     </div>
                     <div style="padding: 15px; text-align: center; color: #9ca3af; font-size: 12px;">
-                        <p>DBEDC File Tracker</p>
+                        <p>' . $companyName . '</p>
                     </div>
                 </div>
             '
@@ -328,7 +337,7 @@ function getEmailTemplate($template, $data) {
             'subject' => 'Task Updated: {task_title}',
             'body' => '
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; text-align: center;">
+                    <div style="background: linear-gradient(135deg, ' . $primaryColor . ' 0%, ' . $secondaryColor . ' 100%); padding: 20px; text-align: center;">
                         <h1 style="color: white; margin: 0;">Task Updated</h1>
                     </div>
                     <div style="padding: 20px; background: #f9fafb;">
@@ -340,10 +349,10 @@ function getEmailTemplate($template, $data) {
                             <p style="margin: 5px 0; color: #6b7280;"><strong>Updated by:</strong> {updated_by}</p>
                             {comment_section}
                         </div>
-                        <a href="{action_url}" style="display: inline-block; background: #667eea; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">View Task</a>
+                        <a href="{action_url}" style="display: inline-block; background: ' . $primaryColor . '; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">View Task</a>
                     </div>
                     <div style="padding: 15px; text-align: center; color: #9ca3af; font-size: 12px;">
-                        <p>DBEDC File Tracker</p>
+                        <p>' . $companyName . '</p>
                     </div>
                 </div>
             '
@@ -366,7 +375,7 @@ function getEmailTemplate($template, $data) {
                         <a href="{action_url}" style="display: inline-block; background: #F59E0B; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">View Task</a>
                     </div>
                     <div style="padding: 15px; text-align: center; color: #9ca3af; font-size: 12px;">
-                        <p>DBEDC File Tracker</p>
+                        <p>' . $companyName . '</p>
                     </div>
                 </div>
             '
@@ -375,7 +384,7 @@ function getEmailTemplate($template, $data) {
             'subject' => 'New Letter Added: {reference_no}',
             'body' => '
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; text-align: center;">
+                    <div style="background: linear-gradient(135deg, ' . $primaryColor . ' 0%, ' . $secondaryColor . ' 100%); padding: 20px; text-align: center;">
                         <h1 style="color: white; margin: 0;">New Letter Added</h1>
                     </div>
                     <div style="padding: 20px; background: #f9fafb;">
@@ -387,10 +396,10 @@ function getEmailTemplate($template, $data) {
                             <p style="margin: 5px 0; color: #6b7280;"><strong>Stakeholder:</strong> {stakeholder}</p>
                             <p style="margin: 5px 0; color: #6b7280;"><strong>Priority:</strong> {priority}</p>
                         </div>
-                        <a href="{action_url}" style="display: inline-block; background: #667eea; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">View Letter</a>
+                        <a href="{action_url}" style="display: inline-block; background: ' . $primaryColor . '; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">View Letter</a>
                     </div>
                     <div style="padding: 15px; text-align: center; color: #9ca3af; font-size: 12px;">
-                        <p>DBEDC File Tracker</p>
+                        <p>' . $companyName . '</p>
                     </div>
                 </div>
             '

@@ -12,6 +12,21 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 
 /**
+ * Set security headers for API responses
+ */
+function setSecurityHeaders() {
+    header("X-Frame-Options: DENY");
+    header("X-Content-Type-Options: nosniff");
+    header("X-XSS-Protection: 1; mode=block");
+    header("Referrer-Policy: strict-origin-when-cross-origin");
+    header("Content-Security-Policy: default-src 'self'");
+    header("Access-Control-Allow-Origin: " . ($_SERVER['HTTP_ORIGIN'] ?? '*'));
+    header("Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS");
+    header("Access-Control-Allow-Headers: Content-Type, X-CSRF-Token, Authorization");
+    header("Access-Control-Allow-Credentials: true");
+}
+
+/**
  * Ensure user is authenticated, redirect to login if not
  */
 function ensureAuthenticated() {
@@ -60,18 +75,45 @@ function getOrCreateUser($googleData) {
         
         return $user['id'];
     } else {
+        // Check if this should be an admin user
+        $isAdmin = false;
+        $role = 'MEMBER';
+        
+        try {
+            // Check if this email is designated as admin
+            $stmt = $pdo->prepare("SELECT setting_value FROM settings WHERE setting_key = 'admin_email'");
+            $stmt->execute();
+            $adminEmail = $stmt->fetchColumn();
+            
+            if ($adminEmail && $googleData['email'] === $adminEmail) {
+                $isAdmin = true;
+                $role = 'ADMIN';
+            }
+            
+            // If no users exist yet, make this person admin
+            $stmt = $pdo->query("SELECT COUNT(*) FROM users");
+            $userCount = $stmt->fetchColumn();
+            if ($userCount == 0) {
+                $isAdmin = true;
+                $role = 'ADMIN';
+            }
+        } catch (Exception $e) {
+            // If settings table doesn't exist yet, continue
+        }
+        
         // Create new user
         $userId = generateULID();
         $stmt = $pdo->prepare("
-            INSERT INTO users (id, google_id, email, name, avatar_url) 
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO users (id, google_id, email, name, avatar_url, role) 
+            VALUES (?, ?, ?, ?, ?, ?)
         ");
         $stmt->execute([
             $userId,
             $googleData['id'],
             $googleData['email'],
             $googleData['name'],
-            $googleData['picture'] ?? null
+            $googleData['picture'] ?? null,
+            $role
         ]);
         
         return $userId;
@@ -112,4 +154,17 @@ function generateCSRFToken() {
  */
 function verifyCSRFToken($token) {
     return isset($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], $token);
+}
+
+/**
+ * Ensure CSRF token is valid for state-changing requests
+ */
+function ensureCSRFValid() {
+    $method = $_SERVER['REQUEST_METHOD'];
+    if (in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'])) {
+        $token = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
+        if (!verifyCSRFToken($token)) {
+            jsonError('Invalid CSRF token', 403);
+        }
+    }
 }

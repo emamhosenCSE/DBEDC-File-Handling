@@ -13,16 +13,39 @@
 
 session_start();
 
+// Security Headers
+header("X-Frame-Options: DENY");
+header("X-Content-Type-Options: nosniff");
+header("X-XSS-Protection: 1; mode=block");
+header("Referrer-Policy: strict-origin-when-cross-origin");
+header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://accounts.google.com https://apis.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://accounts.google.com https://oauth2.googleapis.com");
+
+// Include configuration
+require_once __DIR__ . '/includes/config.php';
+
+// Load branding if database is available
+$companyName = getSystemConfig('company_name', 'File Tracker');
+$primaryColor = getSystemConfig('primary_color', '#667eea');
+$secondaryColor = getSystemConfig('secondary_color', '#764ba2');
+
+try {
+    if (file_exists(__DIR__ . '/includes/db_config.php')) {
+        require_once __DIR__ . '/includes/db.php';
+        $stmt = $pdo->query("SELECT setting_key, setting_value FROM settings WHERE setting_group = 'branding' AND is_public = TRUE");
+        $branding = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
+        $companyName = $branding['company_name'] ?? getSystemConfig('company_name', 'File Tracker');
+        $primaryColor = $branding['primary_color'] ?? getSystemConfig('primary_color', '#667eea');
+        $secondaryColor = $branding['secondary_color'] ?? getSystemConfig('secondary_color', '#764ba2');
+    }
+} catch (Exception $e) {
+    // Database not ready, use defaults
+}
+
 // If already logged in, redirect to dashboard
 if (isset($_SESSION['user_id'])) {
     header('Location: dashboard.php');
     exit;
 }
-
-// UPDATE THESE WITH YOUR GOOGLE OAUTH CREDENTIALS
-define('GOOGLE_CLIENT_ID', '551140686722-ngg3290imab1ru0slcljlourvuvrd7t5.apps.googleusercontent.com');
-define('GOOGLE_CLIENT_SECRET', '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');
-define('GOOGLE_REDIRECT_URI', 'https://files.dhakabypass.com/callback.php');
 
 // Generate state token for security
 $_SESSION['oauth_state'] = bin2hex(random_bytes(16));
@@ -43,8 +66,14 @@ $googleAuthUrl = 'https://accounts.google.com/o/oauth2/v2/auth?' . http_build_qu
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - File Tracker</title>
+    <title>Login - <?php echo htmlspecialchars($companyName); ?></title>
     <style>
+        :root {
+            --primary-color: <?php echo htmlspecialchars($primaryColor); ?>;
+            --secondary-color: <?php echo htmlspecialchars($secondaryColor); ?>;
+            --gradient: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+        }
+        
         * {
             margin: 0;
             padding: 0;
@@ -53,7 +82,7 @@ $googleAuthUrl = 'https://accounts.google.com/o/oauth2/v2/auth?' . http_build_qu
         
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: var(--gradient);
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -74,7 +103,7 @@ $googleAuthUrl = 'https://accounts.google.com/o/oauth2/v2/auth?' . http_build_qu
         .logo {
             width: 80px;
             height: 80px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: var(--gradient);
             border-radius: 50%;
             display: flex;
             align-items: center;
@@ -152,7 +181,7 @@ $googleAuthUrl = 'https://accounts.google.com/o/oauth2/v2/auth?' . http_build_qu
 <body>
     <div class="login-container">
         <div class="logo">FT</div>
-        <h1>File Tracker</h1>
+        <h1><?php echo htmlspecialchars($companyName); ?></h1>
         <p>Sign in to manage your documents and tasks</p>
         
         <?php if (GOOGLE_CLIENT_ID === 'YOUR_CLIENT_ID.apps.googleusercontent.com'): ?>
@@ -174,7 +203,7 @@ $googleAuthUrl = 'https://accounts.google.com/o/oauth2/v2/auth?' . http_build_qu
         
         <div class="footer">
             By signing in, you agree to use this system responsibly<br>
-            © <?php echo date('Y'); ?> DBEDC File Tracker
+            © <?php echo date('Y'); ?> <?php echo htmlspecialchars($companyName); ?>
         </div>
     </div>
 </body>

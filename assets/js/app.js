@@ -27,6 +27,281 @@ const App = {
     selectedItems: []
 };
 
+// ===== LOADING STATE MANAGEMENT =====
+const Loading = {
+    show(elementId = 'app-content', message = 'Loading...') {
+        const element = document.getElementById(elementId);
+        if (element) {
+            element.innerHTML = `
+                <div class="loading-spinner" role="status" aria-live="polite">
+                    <div class="spinner" aria-hidden="true"></div>
+                    <p>${message}</p>
+                </div>
+            `;
+        }
+    },
+
+    hide(elementId = 'app-content') {
+        const element = document.getElementById(elementId);
+        if (element && element.querySelector('.loading-spinner')) {
+            element.querySelector('.loading-spinner').remove();
+        }
+    },
+
+    showButton(button, text = 'Loading...') {
+        if (button) {
+            button.disabled = true;
+            button.dataset.originalText = button.innerHTML;
+            button.innerHTML = `<span class="spinner" style="width: 16px; height: 16px; display: inline-block; margin-right: 8px;"></span>${text}`;
+        }
+    },
+
+    hideButton(button) {
+        if (button && button.dataset.originalText) {
+            button.disabled = false;
+            button.innerHTML = button.dataset.originalText;
+        }
+    }
+};
+
+// ===== SEARCH AUTOCOMPLETE =====
+const SearchAutocomplete = {
+    currentInput: null,
+    suggestions: [],
+    selectedIndex: -1,
+    minQueryLength: 2,
+    debounceTimer: null,
+
+    init(inputElement) {
+        this.currentInput = inputElement;
+        inputElement.setAttribute('autocomplete', 'off');
+        inputElement.setAttribute('aria-expanded', 'false');
+        inputElement.setAttribute('aria-haspopup', 'listbox');
+        inputElement.setAttribute('role', 'combobox');
+
+        // Create suggestions container
+        const container = document.createElement('div');
+        container.className = 'search-suggestions';
+        container.setAttribute('role', 'listbox');
+        container.style.display = 'none';
+        inputElement.parentNode.style.position = 'relative';
+        inputElement.parentNode.appendChild(container);
+
+        // Event listeners
+        inputElement.addEventListener('input', (e) => this.onInput(e));
+        inputElement.addEventListener('keydown', (e) => this.onKeydown(e));
+        inputElement.addEventListener('blur', () => setTimeout(() => this.hide(), 150));
+        inputElement.addEventListener('focus', () => {
+            if (this.suggestions.length > 0) {
+                this.show();
+            }
+        });
+    },
+
+    async onInput(e) {
+        const query = e.target.value.trim();
+
+        // Clear previous timer
+        if (this.debounceTimer) {
+            clearTimeout(this.debounceTimer);
+        }
+
+        // Hide suggestions if query is too short
+        if (query.length < this.minQueryLength) {
+            this.hide();
+            return;
+        }
+
+        // Debounce search
+        this.debounceTimer = setTimeout(async () => {
+            await this.search(query);
+        }, 300);
+    },
+
+    async search(query) {
+        try {
+            const response = await API.get(`api/search.php?q=${encodeURIComponent(query)}&limit=8`);
+            this.suggestions = response.results || [];
+            this.render();
+            this.show();
+        } catch (error) {
+            console.error('Search error:', error);
+            this.hide();
+        }
+    },
+
+    render() {
+        const container = this.currentInput.parentNode.querySelector('.search-suggestions');
+        if (!container) return;
+
+        if (this.suggestions.length === 0) {
+            container.innerHTML = '<div class="suggestion-item no-results">No results found</div>';
+            return;
+        }
+
+        container.innerHTML = this.suggestions.map((item, index) => `
+            <div class="suggestion-item" 
+                 role="option" 
+                 data-index="${index}" 
+                 data-type="${item.type}" 
+                 data-id="${item.id}"
+                 onclick="SearchAutocomplete.selectItem(${index})">
+                <div class="suggestion-icon">
+                    ${this.getIconForType(item.type)}
+                </div>
+                <div class="suggestion-content">
+                    <div class="suggestion-title">${this.highlightMatch(item.title, this.currentInput.value)}</div>
+                    <div class="suggestion-meta">${item.meta}</div>
+                </div>
+            </div>
+        `).join('');
+    },
+
+    getIconForType(type) {
+        const icons = {
+            letter: '📄',
+            task: '📋',
+            stakeholder: '🏢',
+            department: '👥',
+            user: '👤'
+        };
+        return icons[type] || '🔍';
+    },
+
+    highlightMatch(text, query) {
+        if (!query) return text;
+        const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+        return text.replace(regex, '<mark>$1</mark>');
+    },
+
+    onKeydown(e) {
+        const items = this.currentInput.parentNode.querySelectorAll('.suggestion-item:not(.no-results)');
+
+        switch (e.key) {
+            case 'ArrowDown':
+                e.preventDefault();
+                this.selectedIndex = Math.min(this.selectedIndex + 1, items.length - 1);
+                this.updateSelection();
+                break;
+            case 'ArrowUp':
+                e.preventDefault();
+                this.selectedIndex = Math.max(this.selectedIndex - 1, -1);
+                this.updateSelection();
+                break;
+            case 'Enter':
+                if (this.selectedIndex >= 0 && items[this.selectedIndex]) {
+                    e.preventDefault();
+                    this.selectItem(this.selectedIndex);
+                }
+                break;
+            case 'Escape':
+                this.hide();
+                this.currentInput.blur();
+                break;
+        }
+    },
+
+    updateSelection() {
+        const items = this.currentInput.parentNode.querySelectorAll('.suggestion-item:not(.no-results)');
+        items.forEach((item, index) => {
+            item.classList.toggle('selected', index === this.selectedIndex);
+        });
+    },
+
+    selectItem(index) {
+        const item = this.suggestions[index];
+        if (!item) return;
+
+        // Navigate to the item
+        this.navigateToItem(item);
+        this.hide();
+        this.currentInput.value = '';
+    },
+
+    navigateToItem(item) {
+        switch (item.type) {
+            case 'letter':
+                switchTab('letters');
+                // Could add filtering or direct navigation to letter
+                break;
+            case 'task':
+                switchTab(item.assigned_to === App.currentUser.id ? 'my-tasks' : 'all-tasks');
+                break;
+            case 'stakeholder':
+                switchTab('letters');
+                App.filters.stakeholder = item.id;
+                // Trigger filter update
+                break;
+            case 'department':
+                switchTab('departments');
+                break;
+            case 'user':
+                switchTab('users');
+                break;
+        }
+
+        showToast(`Navigating to ${item.type}: ${item.title}`, 'info');
+    },
+
+    show() {
+        const container = this.currentInput.parentNode.querySelector('.search-suggestions');
+        if (container && this.suggestions.length > 0) {
+            container.style.display = 'block';
+            this.currentInput.setAttribute('aria-expanded', 'true');
+        }
+    },
+
+    hide() {
+        const container = this.currentInput.parentNode.querySelector('.search-suggestions');
+        if (container) {
+            container.style.display = 'none';
+            this.currentInput.setAttribute('aria-expanded', 'false');
+        }
+        this.selectedIndex = -1;
+        this.suggestions = [];
+    }
+};
+
+// ===== TOAST NOTIFICATIONS =====
+function showToast(message, type = 'info', duration = 5000) {
+    // Remove existing toasts
+    const existingToasts = document.querySelectorAll('.toast');
+    existingToasts.forEach(toast => toast.remove());
+
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.setAttribute('role', 'alert');
+    toast.setAttribute('aria-live', 'assertive');
+
+    const icon = type === 'success' ? '✓' : type === 'error' ? '✕' : type === 'warning' ? '⚠' : 'ℹ';
+
+    toast.innerHTML = `
+        <div class="toast-content">
+            <span class="toast-icon">${icon}</span>
+            <span class="toast-message">${message}</span>
+            <button class="toast-close" onclick="this.parentElement.parentElement.remove()" aria-label="Close notification">×</button>
+        </div>
+    `;
+
+    document.body.appendChild(toast);
+
+    // Auto remove after duration
+    if (duration > 0) {
+        setTimeout(() => {
+            if (toast.parentElement) {
+                toast.remove();
+            }
+        }, duration);
+    }
+
+    // Add keyboard support
+    toast.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            toast.remove();
+        }
+    });
+}
+
 // ===== API HELPER =====
 const API = {
     async request(endpoint, options = {}) {
@@ -38,56 +313,323 @@ const API = {
             },
             ...options
         };
-        
+
         try {
             const response = await fetch(endpoint, config);
             const data = await response.json();
-            
+
             if (!response.ok) {
-                throw new Error(data.error || 'Request failed');
+                throw new Error(data.error || `Request failed: ${response.status}`);
             }
-            
+
             return data;
         } catch (error) {
             console.error('API Error:', error);
-            showToast(error.message, 'error');
+
+            // Show user-friendly error messages
+            let userMessage = 'An error occurred. Please try again.';
+            if (error.message.includes('Unauthorized')) {
+                userMessage = 'Your session has expired. Please refresh the page.';
+            } else if (error.message.includes('Forbidden')) {
+                userMessage = 'You do not have permission to perform this action.';
+            } else if (error.message.includes('Network')) {
+                userMessage = 'Network error. Please check your connection.';
+            }
+
+            showToast(userMessage, 'error');
             throw error;
         }
     },
-    
-    get(endpoint) {
-        return this.request(endpoint);
+
+    get(endpoint, showLoading = false) {
+        if (showLoading) Loading.show();
+        return this.request(endpoint).finally(() => {
+            if (showLoading) Loading.hide();
+        });
     },
-    
-    post(endpoint, data) {
+
+    post(endpoint, data, showLoading = false) {
+        if (showLoading) Loading.show();
         return this.request(endpoint, {
             method: 'POST',
             body: JSON.stringify(data)
+        }).finally(() => {
+            if (showLoading) Loading.hide();
         });
     },
-    
-    patch(endpoint, data) {
+
+    patch(endpoint, data, showLoading = false) {
+        if (showLoading) Loading.show();
         return this.request(endpoint, {
             method: 'PATCH',
             body: JSON.stringify(data)
+        }).finally(() => {
+            if (showLoading) Loading.hide();
         });
     },
-    
-    delete(endpoint, data) {
+
+    delete(endpoint, data, showLoading = false) {
+        if (showLoading) Loading.show();
         return this.request(endpoint, {
             method: 'DELETE',
             body: JSON.stringify(data)
+        }).finally(() => {
+            if (showLoading) Loading.hide();
         });
     },
-    
-    upload(endpoint, formData) {
+
+    upload(endpoint, formData, showLoading = true) {
+        if (showLoading) Loading.show();
         return this.request(endpoint, {
             method: 'POST',
             body: formData,
             headers: {} // Let browser set Content-Type for FormData
+        }).finally(() => {
+            if (showLoading) Loading.hide();
         });
     }
 };
+
+// ===== KEYBOARD SHORTCUTS =====
+document.addEventListener('keydown', function(e) {
+    // Ignore if user is typing in an input
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.contentEditable === 'true') {
+        return;
+    }
+
+    // Ctrl/Cmd + K: Focus search
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        const searchInput = document.getElementById('global-search');
+        if (searchInput) {
+            searchInput.focus();
+            searchInput.select();
+        }
+    }
+
+    // Ctrl/Cmd + N: New letter (if on letters tab)
+    if ((e.ctrlKey || e.metaKey) && e.key === 'n' && App.currentView === 'letters') {
+        e.preventDefault();
+        showAddLetterModal();
+    }
+
+    // Ctrl/Cmd + T: New task (if on tasks tab)
+    if ((e.ctrlKey || e.metaKey) && e.key === 't' && (App.currentView === 'my-tasks' || App.currentView === 'all-tasks')) {
+        e.preventDefault();
+        showAddTaskModal();
+    }
+
+    // Escape: Close modals
+    if (e.key === 'Escape') {
+        const modal = document.querySelector('.modal');
+        if (modal) {
+            closeModal();
+        }
+    }
+
+    // Number keys 1-9: Switch tabs
+    if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key >= '1' && e.key <= '9') {
+        const tabs = ['dashboard', 'letters', 'my-tasks', 'all-tasks', 'departments', 'users', 'analytics', 'settings', 'notifications'];
+        const tabIndex = parseInt(e.key) - 1;
+        if (tabs[tabIndex] && canAccessView(tabs[tabIndex])) {
+            e.preventDefault();
+            switchTab(tabs[tabIndex]);
+        }
+    }
+});
+
+// ===== HELP SYSTEM =====
+function showHelpModal() {
+    const modal = createModal('Keyboard Shortcuts & Help', `
+        <div class="help-content">
+            <div class="help-section">
+                <h4>Navigation</h4>
+                <div class="shortcut-list">
+                    <div class="shortcut-item">
+                        <kbd>1-9</kbd>
+                        <span>Switch to tab 1-9</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <kbd>Ctrl+K</kbd>
+                        <span>Focus search</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="help-section">
+                <h4>Actions</h4>
+                <div class="shortcut-list">
+                    <div class="shortcut-item">
+                        <kbd>Ctrl+N</kbd>
+                        <span>New letter (on Letters tab)</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <kbd>Ctrl+T</kbd>
+                        <span>New task (on Tasks tabs)</span>
+                    </div>
+                    <div class="shortcut-item">
+                        <kbd>Esc</kbd>
+                        <span>Close modal</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="help-section">
+                <h4>Accessibility</h4>
+                <p>This application supports screen readers and keyboard navigation. Use Tab to navigate between elements and Enter/Space to activate buttons.</p>
+            </div>
+        </div>
+    `, [
+        { text: 'Close', class: 'btn-secondary', action: 'close' }
+    ]);
+}
+
+// ===== BULK OPERATIONS =====
+function toggleSelectAll(checkbox) {
+    const checkboxes = document.querySelectorAll('input[type="checkbox"][value]');
+    checkboxes.forEach(cb => {
+        cb.checked = checkbox.checked;
+        toggleSelectItem(cb.value, cb);
+    });
+}
+
+function toggleSelectItem(id, checkbox) {
+    if (checkbox.checked) {
+        if (!App.selectedItems.includes(id)) {
+            App.selectedItems.push(id);
+        }
+    } else {
+        App.selectedItems = App.selectedItems.filter(item => item !== id);
+    }
+
+    updateBulkActionsBar();
+}
+
+function updateBulkActionsBar() {
+    const bar = document.getElementById('bulk-actions-bar');
+    const count = document.getElementById('selected-count');
+
+    if (App.selectedItems.length > 0) {
+        bar.style.display = 'flex';
+        count.textContent = App.selectedItems.length;
+    } else {
+        bar.style.display = 'none';
+    }
+}
+
+function clearSelection() {
+    App.selectedItems = [];
+    document.querySelectorAll('input[type="checkbox"][value]').forEach(cb => cb.checked = false);
+    updateBulkActionsBar();
+}
+
+async function bulkUpdateStatus() {
+    if (App.selectedItems.length === 0) return;
+
+    const status = prompt('Enter new status (ACTIVE, ARCHIVED, DELETED):');
+    if (!status || !['ACTIVE', 'ARCHIVED', 'DELETED'].includes(status.toUpperCase())) {
+        showToast('Invalid status', 'error');
+        return;
+    }
+
+    try {
+        Loading.showButton(document.querySelector('.bulk-actions-bar .btn'), 'Updating...');
+
+        const response = await API.patch('api/letters.php', {
+            action: 'bulk_update',
+            ids: App.selectedItems,
+            status: status.toUpperCase()
+        });
+
+        showToast(`Updated ${response.updated || 0} letters`, 'success');
+        clearSelection();
+        refreshCurrentView();
+    } catch (error) {
+        showToast('Failed to update letters', 'error');
+    } finally {
+        Loading.hideButton(document.querySelector('.bulk-actions-bar .btn'));
+    }
+}
+
+async function bulkAssignTask() {
+    if (App.selectedItems.length === 0) return;
+
+    const taskTitle = prompt('Enter task title:');
+    if (!taskTitle?.trim()) return;
+
+    const assignedTo = prompt('Assign to user ID (leave empty for unassigned):') || null;
+
+    try {
+        Loading.showButton(document.querySelector('.bulk-actions-bar .btn'), 'Creating tasks...');
+
+        const response = await API.post('api/tasks.php', {
+            action: 'bulk_create',
+            letter_ids: App.selectedItems,
+            title: taskTitle.trim(),
+            assigned_to: assignedTo
+        });
+
+        showToast(`Created ${response.created || 0} tasks`, 'success');
+        clearSelection();
+        refreshCurrentView();
+    } catch (error) {
+        showToast('Failed to create tasks', 'error');
+    } finally {
+        Loading.hideButton(document.querySelector('.bulk-actions-bar .btn'));
+    }
+}
+
+async function bulkExport() {
+    if (App.selectedItems.length === 0) return;
+
+    try {
+        Loading.showButton(document.querySelector('.bulk-actions-bar .btn'), 'Exporting...');
+
+        // Create download link
+        const params = new URLSearchParams({
+            export: 'selected',
+            ids: App.selectedItems.join(',')
+        });
+
+        const link = document.createElement('a');
+        link.href = `api/letters.php?${params}`;
+        link.download = `letters_export_${new Date().toISOString().split('T')[0]}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        showToast('Export started', 'success');
+    } catch (error) {
+        showToast('Export failed', 'error');
+    } finally {
+        Loading.hideButton(document.querySelector('.bulk-actions-bar .btn'));
+    }
+}
+
+async function bulkDelete() {
+    if (App.selectedItems.length === 0) return;
+
+    if (!confirm(`Are you sure you want to delete ${App.selectedItems.length} letters? This action cannot be undone.`)) {
+        return;
+    }
+
+    try {
+        Loading.showButton(document.querySelector('.bulk-actions-bar .btn'), 'Deleting...');
+
+        const response = await API.delete('api/letters.php', {
+            action: 'bulk_delete',
+            ids: App.selectedItems
+        });
+
+        showToast(`Deleted ${response.deleted || 0} letters`, 'success');
+        clearSelection();
+        refreshCurrentView();
+    } catch (error) {
+        showToast('Failed to delete letters', 'error');
+    } finally {
+        Loading.hideButton(document.querySelector('.bulk-actions-bar .btn'));
+    }
+}
 
 // ===== ROUTING & VIEWS =====
 function switchTab(view) {
@@ -119,6 +661,8 @@ function canAccessView(view) {
         'departments': ['ADMIN', 'MANAGER'].includes(userRole),
         'users': userRole === 'ADMIN',
         'analytics': true,
+        'workflow': ['ADMIN', 'MANAGER'].includes(userRole),
+        'reports': true,
         'settings': userRole === 'ADMIN',
         'notifications': true
     };
@@ -153,6 +697,12 @@ async function loadView(view) {
             case 'analytics':
                 await renderAnalytics();
                 break;
+            case 'workflow':
+                await renderWorkflow();
+                break;
+            case 'reports':
+                await renderReports();
+                break;
             case 'settings':
                 await renderSettings();
                 break;
@@ -183,6 +733,18 @@ async function renderDashboard() {
         const tasksData = myTasks.status === 'fulfilled' ? myTasks.value : { tasks: [] };
         const activitiesData = activities.status === 'fulfilled' ? activities.value : { activities: [] };
         const calendarInfo = calendarData.status === 'fulfilled' ? calendarData.value : { letters: [] };
+        
+        // Check for any failed requests and show warning
+        const failedRequests = [stats, recentLetters, myTasks, activities, calendarData]
+            .filter(result => result.status === 'rejected')
+            .map((result, index) => {
+                const names = ['Analytics', 'Recent Letters', 'My Tasks', 'Activities', 'Calendar'];
+                return names[index];
+            });
+        
+        if (failedRequests.length > 0) {
+            showToast(`Some data failed to load: ${failedRequests.join(', ')}. Please refresh the page.`, 'warning');
+        }
         
         const urgentTasks = (tasksData.tasks || []).filter(t => t.priority === 'URGENT' || t.priority === 'HIGH') || [];
         
@@ -285,7 +847,7 @@ async function renderDashboard() {
         document.getElementById('app-content').innerHTML = `
             <div class="card">
                 <div class="text-center">
-                    <h3>Welcome to DBEDC File Tracker</h3>
+                    <h3>Welcome to File Tracker</h3>
                     <p class="text-muted">Please run the database migration to initialize the system.</p>
                     <a href="sql/migration_v2.sql" target="_blank" class="btn btn-primary">View Migration SQL</a>
                 </div>
@@ -1936,7 +2498,7 @@ function testPushNotification() {
     showToast('Test notification sent to your browser!', 'success');
     
     // Trigger a test notification
-    new Notification('DBEDC File Tracker', {
+    new Notification('File Tracker', {
         body: 'This is a test push notification!',
         icon: '/assets/icon-192.png',
         tag: 'test-notification'
@@ -2250,6 +2812,692 @@ function exportReport(type) {
     window.open(`api/reports.php?type=${type}`, '_blank');
 }
 
+// ===== WORKFLOW AUTOMATION VIEW =====
+async function renderWorkflow() {
+    try {
+        const [automationStatus, overdueTasks, upcomingDeadlines] = await Promise.all([
+            API.get('api/workflow.php?action=automation-status'),
+            API.get('api/workflow.php?action=overdue-tasks'),
+            API.get('api/workflow.php?action=upcoming-deadlines')
+        ]);
+
+        const html = `
+            <div class="workflow-view">
+                <div class="workflow-header">
+                    <h2>Workflow Automation</h2>
+                    <p class="text-muted">Automated task management, escalation, and deadline monitoring</p>
+                </div>
+
+                <div class="workflow-controls">
+                    <button class="btn btn-primary" onclick="runAutomation()">
+                        <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.293l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L9 9.414V13a1 1 0 102 0V9.414l1.293 1.293a1 1 0 001.414-1.414z" clip-rule="evenodd"/>
+                        </svg>
+                        Run Automation Now
+                    </button>
+                    <button class="btn btn-secondary" onclick="refreshWorkflow()">
+                        <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/>
+                        </svg>
+                        Refresh
+                    </button>
+                </div>
+
+                <div class="workflow-stats">
+                    <div class="stat-card">
+                        <div class="stat-value">${automationStatus.data?.last_run?.data?.overdue_processed || 0}</div>
+                        <div class="stat-label">Overdue Tasks Processed</div>
+                        <div class="stat-meta">Last run: ${automationStatus.data?.last_run ? formatDate(automationStatus.data.last_run.created_at) : 'Never'}</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${automationStatus.data?.last_run?.data?.reminders_sent || 0}</div>
+                        <div class="stat-label">Reminders Sent</div>
+                        <div class="stat-meta">Last run: ${automationStatus.data?.last_run ? formatDate(automationStatus.data.last_run.created_at) : 'Never'}</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${overdueTasks.data?.length || 0}</div>
+                        <div class="stat-label">Currently Overdue</div>
+                        <div class="stat-meta">Tasks requiring attention</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${upcomingDeadlines.data?.length || 0}</div>
+                        <div class="stat-label">Upcoming Deadlines</div>
+                        <div class="stat-meta">Due within 7 days</div>
+                    </div>
+                </div>
+
+                <div class="workflow-grid">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">Overdue Tasks</h3>
+                            <span class="badge badge-error">${overdueTasks.data?.length || 0}</span>
+                        </div>
+                        <div class="card-body">
+                            ${overdueTasks.data && overdueTasks.data.length > 0 ? `
+                                <div class="task-list">
+                                    ${overdueTasks.data.map(task => `
+                                        <div class="task-item overdue" onclick="viewTaskDetail('${task.id}')">
+                                            <div class="task-info">
+                                                <div class="task-title">${task.title}</div>
+                                                <div class="task-meta">
+                                                    ${task.reference_no} • Assigned to ${task.assigned_to_name || 'Unassigned'} • ${task.days_overdue} days overdue
+                                                </div>
+                                            </div>
+                                            <div class="task-actions">
+                                                <button class="btn btn-sm btn-warning" onclick="escalateTask('${task.id}'); event.stopPropagation();">
+                                                    Escalate
+                                                </button>
+                                            </div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            ` : '<p class="text-center text-muted">No overdue tasks</p>'}
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">Upcoming Deadlines</h3>
+                            <span class="badge badge-warning">${upcomingDeadlines.data?.length || 0}</span>
+                        </div>
+                        <div class="card-body">
+                            ${upcomingDeadlines.data && upcomingDeadlines.data.length > 0 ? `
+                                <div class="task-list">
+                                    ${upcomingDeadlines.data.map(task => `
+                                        <div class="task-item upcoming" onclick="viewTaskDetail('${task.id}')">
+                                            <div class="task-info">
+                                                <div class="task-title">${task.title}</div>
+                                                <div class="task-meta">
+                                                    ${task.reference_no} • Assigned to ${task.assigned_to_name || 'Unassigned'} • Due ${task.days_until_due === 0 ? 'today' : `in ${task.days_until_due} day(s)`}
+                                                </div>
+                                            </div>
+                                            <div class="task-priority">
+                                                <span class="badge priority-${task.priority?.toLowerCase()}">${task.priority}</span>
+                                            </div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            ` : '<p class="text-center text-muted">No upcoming deadlines</p>'}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mt-lg">
+                    <div class="card-header">
+                        <h3 class="card-title">Automation History</h3>
+                    </div>
+                    <div class="card-body">
+                        ${automationStatus.data?.recent_runs && automationStatus.data.recent_runs.length > 0 ? `
+                            <div class="table-container">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Run Time</th>
+                                            <th>Overdue Processed</th>
+                                            <th>Reminders Sent</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${automationStatus.data.recent_runs.map(run => `
+                                            <tr>
+                                                <td>${formatDate(run.created_at)}</td>
+                                                <td>${run.data?.overdue_processed || 0}</td>
+                                                <td>${run.data?.reminders_sent || 0}</td>
+                                                <td><span class="badge badge-success">Completed</span></td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ` : '<p class="text-center text-muted">No automation runs yet</p>'}
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.getElementById('app-content').innerHTML = html;
+    } catch (error) {
+        document.getElementById('app-content').innerHTML = `
+            <div class="card">
+                <p class="text-center">Error loading workflow: ${error.message}</p>
+            </div>
+        `;
+    }
+}
+
+async function runAutomation() {
+    if (!confirm('Run workflow automation now? This will process overdue tasks and send reminders.')) {
+        return;
+    }
+
+    try {
+        showToast('Running automation...', 'info');
+        const result = await API.post('api/workflow.php?action=run-automation', {});
+
+        if (result.success) {
+            showToast(`Automation completed: ${result.data.overdue_processed} overdue tasks processed, ${result.data.reminders_sent} reminders sent`, 'success');
+            refreshWorkflow();
+        } else {
+            showToast('Automation failed', 'error');
+        }
+    } catch (error) {
+        showToast('Failed to run automation', 'error');
+    }
+}
+
+async function escalateTask(taskId) {
+    if (!confirm('Escalate this task to the department manager?')) {
+        return;
+    }
+
+    try {
+        const result = await API.post('api/workflow.php?action=escalate-task', { task_id: taskId });
+
+        if (result.success) {
+            showToast('Task escalated successfully', 'success');
+            refreshWorkflow();
+        } else {
+            showToast('Failed to escalate task', 'error');
+        }
+    } catch (error) {
+        showToast('Failed to escalate task', 'error');
+    }
+}
+
+function refreshWorkflow() {
+    if (App.currentView === 'workflow') {
+        loadView('workflow');
+    }
+}
+
+// ===== ADVANCED REPORTS VIEW =====
+async function renderReports() {
+    try {
+        const [options, savedReports, kpis] = await Promise.all([
+            API.get('api/advanced-reports.php?action=report-builder-options'),
+            API.get('api/advanced-reports.php?action=saved-reports'),
+            API.get('api/advanced-reports.php?action=performance-kpis&period=month')
+        ]);
+
+        const html = `
+            <div class="reports-view">
+                <div class="reports-header">
+                    <h2>Advanced Reports</h2>
+                    <p class="text-muted">Custom report builder, analytics, and performance insights</p>
+                </div>
+
+                <div class="reports-tabs">
+                    <button class="tab-btn active" onclick="switchReportTab('builder')">Report Builder</button>
+                    <button class="tab-btn" onclick="switchReportTab('analytics')">Analytics Dashboard</button>
+                    <button class="tab-btn" onclick="switchReportTab('saved')">Saved Reports</button>
+                </div>
+
+                <div id="reports-content">
+                    <!-- Report Builder Tab -->
+                    <div id="builder-tab" class="report-tab active">
+                        <div class="report-builder">
+                            <div class="builder-form">
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="report-entity">Entity</label>
+                                        <select id="report-entity" class="form-control">
+                                            ${options.data.entities.map(entity => `
+                                                <option value="${entity.value}">${entity.label}</option>
+                                            `).join('')}
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="report-date-range">Date Range</label>
+                                        <select id="report-date-range" class="form-control">
+                                            ${options.data.date_ranges.map(range => `
+                                                <option value="${range.value}">${range.label}</option>
+                                            `).join('')}
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="report-group-by">Group By</label>
+                                        <select id="report-group-by" class="form-control">
+                                            <option value="">None</option>
+                                            ${options.data.group_by.map(group => `
+                                                <option value="${group.value}">${group.label}</option>
+                                            `).join('')}
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="report-department">Department</label>
+                                        <select id="report-department" class="form-control">
+                                            <option value="">All Departments</option>
+                                            ${options.data.departments.map(dept => `
+                                                <option value="${dept.id}">${dept.name}</option>
+                                            `).join('')}
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="report-stakeholder">Stakeholder</label>
+                                        <select id="report-stakeholder" class="form-control">
+                                            <option value="">All Stakeholders</option>
+                                            ${options.data.stakeholders.map(stakeholder => `
+                                                <option value="${stakeholder.id}">${stakeholder.name}</option>
+                                            `).join('')}
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="report-status">Status</label>
+                                        <select id="report-status" class="form-control">
+                                            <option value="">All Statuses</option>
+                                            <option value="PENDING">Pending</option>
+                                            <option value="IN_PROGRESS">In Progress</option>
+                                            <option value="COMPLETED">Completed</option>
+                                            <option value="CANCELLED">Cancelled</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="form-actions">
+                                    <button class="btn btn-primary" onclick="generateReport()">
+                                        <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                                        </svg>
+                                        Generate Report
+                                    </button>
+                                    <button class="btn btn-secondary" onclick="saveReport()">
+                                        <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
+                                            <path d="M7.707 10.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 10-1.414-1.414L11 11.586V7a1 1 0 10-2 0v4.586l-1.293-1.293z"/>
+                                            <path d="M5 4a2 2 0 012-2h6a2 2 0 012 2v14l-5-2.5L5 18V4z"/>
+                                        </svg>
+                                        Save Report
+                                    </button>
+                                    <button class="btn btn-outline" onclick="resetReportBuilder()">
+                                        <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/>
+                                        </svg>
+                                        Reset
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div id="report-results" class="report-results" style="display: none;">
+                                <div class="results-header">
+                                    <h3>Report Results</h3>
+                                    <div class="results-actions">
+                                        <button class="btn btn-sm btn-secondary" onclick="exportReport('csv')">
+                                            Export CSV
+                                        </button>
+                                        <button class="btn btn-sm btn-secondary" onclick="exportReport('json')">
+                                            Export JSON
+                                        </button>
+                                    </div>
+                                </div>
+                                <div id="report-table-container" class="table-container"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Analytics Dashboard Tab -->
+                    <div id="analytics-tab" class="report-tab">
+                        <div class="analytics-dashboard">
+                            <div class="kpi-grid">
+                                <div class="kpi-card">
+                                    <div class="kpi-value">${kpis.data.letters.total}</div>
+                                    <div class="kpi-label">Total Letters</div>
+                                    <div class="kpi-change positive">+${Math.round(kpis.data.letters.completion_rate)}% completed</div>
+                                </div>
+                                <div class="kpi-card">
+                                    <div class="kpi-value">${kpis.data.tasks.total}</div>
+                                    <div class="kpi-label">Total Tasks</div>
+                                    <div class="kpi-change positive">+${Math.round(kpis.data.tasks.completion_rate)}% completed</div>
+                                </div>
+                                <div class="kpi-card">
+                                    <div class="kpi-value">${kpis.data.letters.avg_completion_days}d</div>
+                                    <div class="kpi-label">Avg. Completion Time</div>
+                                    <div class="kpi-change neutral">Letters</div>
+                                </div>
+                                <div class="kpi-card">
+                                    <div class="kpi-value">${kpis.data.letters.overdue}</div>
+                                    <div class="kpi-label">Overdue Items</div>
+                                    <div class="kpi-change ${kpis.data.letters.overdue > 0 ? 'negative' : 'positive'}">
+                                        ${kpis.data.letters.overdue > 0 ? 'Action needed' : 'All caught up'}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="analytics-charts">
+                                <div class="chart-container">
+                                    <h4>Performance Trends</h4>
+                                    <div id="trend-chart" class="chart-placeholder">
+                                        <div class="chart-loading">Loading trend data...</div>
+                                    </div>
+                                </div>
+                                <div class="chart-container">
+                                    <h4>Department Performance</h4>
+                                    <div id="department-chart" class="chart-placeholder">
+                                        <div class="chart-loading">Loading department data...</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Saved Reports Tab -->
+                    <div id="saved-tab" class="report-tab">
+                        <div class="saved-reports">
+                            <div class="saved-reports-header">
+                                <h3>Your Saved Reports</h3>
+                                <button class="btn btn-primary" onclick="createNewReport()">
+                                    <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/>
+                                    </svg>
+                                    Create New Report
+                                </button>
+                            </div>
+
+                            <div class="reports-list">
+                                ${savedReports.data.map(report => `
+                                    <div class="report-item">
+                                        <div class="report-info">
+                                            <h4>${report.name}</h4>
+                                            <p class="text-muted">Created ${formatDate(report.created_at)}</p>
+                                            ${report.is_public ? '<span class="badge badge-info">Public</span>' : ''}
+                                        </div>
+                                        <div class="report-actions">
+                                            <button class="btn btn-sm btn-primary" onclick="loadSavedReport('${report.id}')">
+                                                Load
+                                            </button>
+                                            <button class="btn btn-sm btn-secondary" onclick="editSavedReport('${report.id}')">
+                                                Edit
+                                            </button>
+                                            <button class="btn btn-sm btn-danger" onclick="deleteSavedReport('${report.id}')">
+                                                Delete
+                                            </button>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.getElementById('app-content').innerHTML = html;
+
+        // Load analytics data
+        loadAnalyticsData();
+
+    } catch (error) {
+        document.getElementById('app-content').innerHTML = `
+            <div class="card">
+                <p class="text-center">Error loading reports: ${error.message}</p>
+            </div>
+        `;
+    }
+}
+
+function switchReportTab(tabName) {
+    // Update tab buttons
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.textContent.toLowerCase().includes(tabName));
+    });
+
+    // Update tab content
+    document.querySelectorAll('.report-tab').forEach(tab => {
+        tab.classList.toggle('active', tab.id === `${tabName}-tab`);
+    });
+}
+
+async function generateReport() {
+    const entity = document.getElementById('report-entity').value;
+    const dateRange = document.getElementById('report-date-range').value;
+    const groupBy = document.getElementById('report-group-by').value;
+    const department = document.getElementById('report-department').value;
+    const stakeholder = document.getElementById('report-stakeholder').value;
+    const status = document.getElementById('report-status').value;
+
+    const filters = {};
+    if (dateRange) filters.date_range = dateRange;
+    if (department) filters.department_id = department;
+    if (stakeholder) filters.stakeholder_id = stakeholder;
+    if (status) filters.status = status;
+
+    try {
+        showToast('Generating report...', 'info');
+        const result = await API.get(`api/advanced-reports.php?action=generate-report&entity=${entity}&group_by=${groupBy}&filters=${encodeURIComponent(JSON.stringify(filters))}&metrics=["count","completion_rate","avg_completion_days"]`);
+
+        displayReportResults(result.data);
+        showToast('Report generated successfully', 'success');
+
+    } catch (error) {
+        showToast('Failed to generate report', 'error');
+    }
+}
+
+function displayReportResults(data) {
+    const container = document.getElementById('report-results');
+    const tableContainer = document.getElementById('report-table-container');
+
+    if (!data || data.length === 0) {
+        tableContainer.innerHTML = '<p class="text-center text-muted">No data found for the selected criteria</p>';
+        container.style.display = 'block';
+        return;
+    }
+
+    const headers = Object.keys(data[0]);
+    const table = `
+        <table>
+            <thead>
+                <tr>
+                    ${headers.map(header => `<th>${header.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</th>`).join('')}
+                </tr>
+            </thead>
+            <tbody>
+                ${data.map(row => `
+                    <tr>
+                        ${headers.map(header => `<td>${row[header] || '-'}</td>`).join('')}
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    `;
+
+    tableContainer.innerHTML = table;
+    container.style.display = 'block';
+
+    // Store current report data for export
+    window.currentReportData = data;
+}
+
+async function exportReport(format) {
+    if (!window.currentReportData) {
+        showToast('No report data to export', 'warning');
+        return;
+    }
+
+    try {
+        const result = await API.post('api/advanced-reports.php?action=export-report', {
+            format: format,
+            data: window.currentReportData,
+            filename: `report_${new Date().toISOString().split('T')[0]}`
+        });
+
+        // Download the file
+        const link = document.createElement('a');
+        link.href = result.data.url;
+        link.download = result.data.filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        showToast(`Report exported as ${format.toUpperCase()}`, 'success');
+
+    } catch (error) {
+        showToast('Failed to export report', 'error');
+    }
+}
+
+async function saveReport() {
+    const reportName = prompt('Enter a name for this report:');
+    if (!reportName) return;
+
+    const config = {
+        entity: document.getElementById('report-entity').value,
+        date_range: document.getElementById('report-date-range').value,
+        group_by: document.getElementById('report-group-by').value,
+        filters: {
+            department_id: document.getElementById('report-department').value,
+            stakeholder_id: document.getElementById('report-stakeholder').value,
+            status: document.getElementById('report-status').value
+        },
+        metrics: ['count', 'completion_rate', 'avg_completion_days']
+    };
+
+    try {
+        const result = await API.post('api/advanced-reports.php?action=save-report', {
+            name: reportName,
+            config: config,
+            is_public: false
+        });
+
+        showToast('Report saved successfully', 'success');
+        // Refresh saved reports tab
+        if (document.getElementById('saved-tab').classList.contains('active')) {
+            loadView('reports');
+        }
+
+    } catch (error) {
+        showToast('Failed to save report', 'error');
+    }
+}
+
+function resetReportBuilder() {
+    document.getElementById('report-entity').value = 'letters';
+    document.getElementById('report-date-range').value = 'this_month';
+    document.getElementById('report-group-by').value = '';
+    document.getElementById('report-department').value = '';
+    document.getElementById('report-stakeholder').value = '';
+    document.getElementById('report-status').value = '';
+    document.getElementById('report-results').style.display = 'none';
+}
+
+async function loadSavedReport(reportId) {
+    try {
+        const reports = await API.get('api/advanced-reports.php?action=saved-reports');
+        const report = reports.data.find(r => r.id === reportId);
+
+        if (!report) {
+            showToast('Report not found', 'error');
+            return;
+        }
+
+        const config = JSON.parse(report.config);
+
+        // Populate form
+        document.getElementById('report-entity').value = config.entity || 'letters';
+        document.getElementById('report-date-range').value = config.date_range || 'this_month';
+        document.getElementById('report-group-by').value = config.group_by || '';
+        document.getElementById('report-department').value = config.filters?.department_id || '';
+        document.getElementById('report-stakeholder').value = config.filters?.stakeholder_id || '';
+        document.getElementById('report-status').value = config.filters?.status || '';
+
+        // Switch to builder tab
+        switchReportTab('builder');
+
+        showToast('Report loaded successfully', 'success');
+
+    } catch (error) {
+        showToast('Failed to load report', 'error');
+    }
+}
+
+async function deleteSavedReport(reportId) {
+    if (!confirm('Are you sure you want to delete this saved report?')) return;
+
+    try {
+        await API.delete(`api/advanced-reports.php?action=delete-saved-report&id=${reportId}`);
+        showToast('Report deleted successfully', 'success');
+        loadView('reports'); // Refresh the view
+
+    } catch (error) {
+        showToast('Failed to delete report', 'error');
+    }
+}
+
+async function loadAnalyticsData() {
+    try {
+        const [trends, departments] = await Promise.all([
+            API.get('api/advanced-reports.php?action=trend-analysis&metric=completion_rate&period=6months'),
+            API.get('api/advanced-reports.php?action=department-performance&period=month')
+        ]);
+
+        // Simple chart rendering (you could integrate with Chart.js or similar)
+        renderTrendChart(trends.data);
+        renderDepartmentChart(departments.data);
+
+    } catch (error) {
+        console.error('Failed to load analytics data:', error);
+    }
+}
+
+function renderTrendChart(data) {
+    const container = document.getElementById('trend-chart');
+    if (!data || data.length === 0) {
+        container.innerHTML = '<p class="text-center text-muted">No trend data available</p>';
+        return;
+    }
+
+    const chartHtml = `
+        <div class="simple-chart">
+            ${data.map(item => `
+                <div class="chart-bar">
+                    <div class="bar-label">${item.month}</div>
+                    <div class="bar-container">
+                        <div class="bar-fill" style="height: ${Math.min(item.completion_rate * 2, 100)}%"></div>
+                        <span class="bar-value">${item.completion_rate}%</span>
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+
+    container.innerHTML = chartHtml;
+}
+
+function renderDepartmentChart(data) {
+    const container = document.getElementById('department-chart');
+    if (!data || data.length === 0) {
+        container.innerHTML = '<p class="text-center text-muted">No department data available</p>';
+        return;
+    }
+
+    const chartHtml = `
+        <div class="department-chart">
+            ${data.map(dept => `
+                <div class="dept-item">
+                    <div class="dept-name">${dept.department_name}</div>
+                    <div class="dept-stats">
+                        <div class="stat">Letters: ${dept.total_letters} (${dept.letter_completion_rate}%)</div>
+                        <div class="stat">Tasks: ${dept.total_tasks} (${dept.task_completion_rate}%)</div>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: ${dept.letter_completion_rate}%"></div>
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+
+    container.innerHTML = chartHtml;
+}
+
+function createNewReport() {
+    resetReportBuilder();
+    switchReportTab('builder');
+    showToast('Report builder reset - create your custom report', 'info');
+}
+
 // ===== TASK DETAIL & UPDATE =====
 async function viewTaskDetail(taskId) {
     try {
@@ -2486,10 +3734,159 @@ document.addEventListener('click', (e) => {
     }
 });
 
+    }
+}
+
+// ===== DRAG & DROP FILE UPLOAD =====
+const FileUpload = {
+    dropZone: null,
+    fileInput: null,
+    files: [],
+    maxFiles: 5,
+    maxSize: 10 * 1024 * 1024, // 10MB
+    allowedTypes: ['application/pdf'],
+
+    init(dropZoneSelector, fileInputSelector) {
+        this.dropZone = document.querySelector(dropZoneSelector);
+        this.fileInput = document.querySelector(fileInputSelector);
+
+        if (!this.dropZone || !this.fileInput) return;
+
+        this.setupEventListeners();
+        this.updateUI();
+    },
+
+    setupEventListeners() {
+        // Prevent default drag behaviors
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            this.dropZone.addEventListener(eventName, this.preventDefaults, false);
+            document.body.addEventListener(eventName, this.preventDefaults, false);
+        });
+
+        // Highlight drop zone when dragging over it
+        ['dragenter', 'dragover'].forEach(eventName => {
+            this.dropZone.addEventListener(eventName, () => this.highlight(), false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            this.dropZone.addEventListener(eventName, () => this.unhighlight(), false);
+        });
+
+        // Handle drop
+        this.dropZone.addEventListener('drop', (e) => this.handleDrop(e), false);
+
+        // Handle file input change
+        this.fileInput.addEventListener('change', (e) => this.handleFileSelect(e), false);
+    },
+
+    preventDefaults(e) {
+        e.preventDefault();
+        e.stopPropagation();
+    },
+
+    highlight() {
+        this.dropZone.classList.add('drag-over');
+    },
+
+    unhighlight() {
+        this.dropZone.classList.remove('drag-over');
+    },
+
+    handleDrop(e) {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        this.handleFiles(files);
+    },
+
+    handleFileSelect(e) {
+        const files = e.target.files;
+        this.handleFiles(files);
+    },
+
+    handleFiles(fileList) {
+        [...fileList].forEach(file => {
+            if (this.validateFile(file)) {
+                this.files.push(file);
+            }
+        });
+        this.updateUI();
+    },
+
+    validateFile(file) {
+        if (this.files.length >= this.maxFiles) {
+            showToast(`Maximum ${this.maxFiles} files allowed`, 'error');
+            return false;
+        }
+
+        if (file.size > this.maxSize) {
+            showToast(`File "${file.name}" is too large (max ${this.formatSize(this.maxSize)})`, 'error');
+            return false;
+        }
+
+        if (!this.allowedTypes.includes(file.type)) {
+            showToast(`File "${file.name}" is not a supported type`, 'error');
+            return false;
+        }
+
+        return true;
+    },
+
+    removeFile(index) {
+        this.files.splice(index, 1);
+        this.updateUI();
+    },
+
+    updateUI() {
+        const fileList = this.dropZone.querySelector('.file-list');
+        if (!fileList) return;
+
+        fileList.innerHTML = this.files.map((file, index) => `
+            <div class="file-item">
+                <div class="file-info">
+                    <span class="file-name">${file.name}</span>
+                    <span class="file-size">(${this.formatSize(file.size)})</span>
+                </div>
+                <button type="button" class="btn-icon file-remove" onclick="FileUpload.removeFile(${index})" title="Remove file">
+                    <svg width="14" height="14" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                    </svg>
+                </button>
+            </div>
+        `).join('');
+
+        // Update file input
+        if (this.fileInput) {
+            // Create new DataTransfer to update file input
+            const dt = new DataTransfer();
+            this.files.forEach(file => dt.items.add(file));
+            this.fileInput.files = dt.files;
+        }
+    },
+
+    formatSize(bytes) {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    },
+
+    clear() {
+        this.files = [];
+        this.updateUI();
+    },
+
+    getFiles() {
+        return this.files;
+    }
+};
+
 // ===== GLOBAL SEARCH =====
 document.addEventListener('DOMContentLoaded', () => {
     const searchInput = document.getElementById('global-search');
     if (searchInput) {
+        // Initialize search autocomplete
+        SearchAutocomplete.init(searchInput);
+
+        // Fallback search functionality
         let debounceTimer;
         searchInput.addEventListener('input', (e) => {
             clearTimeout(debounceTimer);
@@ -2499,7 +3896,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }, 300);
         });
     }
-    
+
     // Initialize dashboard
     loadView('dashboard');
 });

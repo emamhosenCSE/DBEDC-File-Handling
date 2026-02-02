@@ -9,45 +9,112 @@ A comprehensive web-based file and task tracking system built with vanilla PHP, 
 - **Task Assignment** - Create and assign tasks to individuals or departments
 - **Status Tracking** - Track task progress (Pending → In Progress → Completed)
 - **Analytics Dashboard** - View statistics and completion rates
+- **Workflow Automation** - Automated task escalation, deadline reminders, and smart assignment
 - **PWA Support** - Install as mobile app with offline capabilities
 - **Responsive Design** - Works on desktop and mobile devices
 
-## 🚀 Installation Guide
+## 🤖 Workflow Automation
+
+The system includes advanced workflow automation features to improve productivity and ensure timely task completion:
+
+### Automated Features
+
+- **Deadline Reminders**: Automatic notifications sent 2 days before task due dates
+- **Overdue Task Escalation**: Tasks overdue by 3+ days are automatically escalated to department managers
+- **Smart Task Assignment**: Auto-assign tasks to users with the least workload in the relevant department
+- **Periodic Reviews**: Automatic creation of review tasks for letters older than 6 months
+
+### Manual Controls
+
+- **Workflow Dashboard**: Admin/Manager interface to monitor overdue tasks and upcoming deadlines
+- **Manual Escalation**: Ability to manually escalate any task to department managers
+- **Automation Triggers**: Run workflow automation on-demand from the dashboard
+
+### Cron Job Setup
+
+Set up automated workflow processing by adding this to your crontab:
+
+```bash
+# Run workflow automation hourly
+0 * * * * /usr/bin/php /path/to/your/site/cron-workflow.php
+```
+
+Or for Windows Task Scheduler:
+
+```batch
+schtasks /create /tn "DBEDC Workflow Automation" /tr "php D:\path\to\site\cron-workflow.php" /sc hourly
+```
+
+## � Advanced Reporting System
+
+The system provides comprehensive reporting and analytics capabilities for data-driven decision making:
+
+### Report Builder Features
+
+- **Custom Report Creation**: Build reports with flexible filters and grouping options
+- **Multiple Data Sources**: Generate reports from letters, tasks, activities, and user data
+- **Advanced Filtering**: Filter by date ranges, departments, stakeholders, status, and priority
+- **Dynamic Grouping**: Group results by department, stakeholder, priority, status, or time periods
+- **Real-time Generation**: Generate reports instantly with live data
+
+### Analytics Dashboard
+
+- **Key Performance Indicators**: Track completion rates, average processing times, and overdue items
+- **Trend Analysis**: Visualize performance trends over time (3, 6, or 12 months)
+- **Department Comparison**: Compare performance across different departments
+- **Interactive Charts**: Built-in charting with completion rates and processing metrics
+
+### Report Management
+
+- **Save Custom Reports**: Save and reuse frequently used report configurations
+- **Scheduled Reports**: Automate report generation and email delivery
+- **Export Options**: Export reports to CSV or JSON formats
+- **Public Reports**: Share reports with all users or keep them private
+
+### Scheduled Reports Setup
+
+Set up automated report delivery by adding this to your crontab:
+
+```bash
+# Run scheduled reports weekly (Mondays at 9 AM)
+0 9 * * 1 /usr/bin/php /path/to/your/site/cron-reports.php
+```
+
+Or for Windows Task Scheduler:
+
+```batch
+schtasks /create /tn "DBEDC Scheduled Reports" /tr "php D:\path\to\site\cron-reports.php" /sc weekly /d MON /st 09:00
+```
+
+## �🚀 Installation Guide
 
 ### Prerequisites
 
-- Namecheap shared hosting account (or any cPanel hosting)
-- PHP 8.0 or higher
+- Web hosting with PHP 8.0 or higher
 - MySQL 5.7 or higher
 - Google Cloud Console account (for OAuth)
 
-### Step 1: Upload Files
+### Quick Installation
 
-1. Download all files from this repository
-2. Connect to your hosting via FTP or cPanel File Manager
-3. Upload the `file-tracker` folder to `/public_html/`
-4. Your structure should look like:
-   ```
-   /public_html/
-   ├── api/
-   ├── assets/
-   ├── includes/
-   ├── sql/
-   ├── index.php
-   ├── login.php
-   ├── dashboard.php
-   └── ...
-   ```
+1. **Upload Files**: Upload all files to your web root directory
+2. **Access Installer**: Visit `https://yourdomain.com/install.php`
+3. **Follow 6-Step Wizard**:
+   - Database configuration
+   - OAuth setup
+   - Admin email designation
+   - Branding customization
+   - Email configuration
+   - Automated final setup
+4. **Admin Login**: Log in with Google using the designated admin email
 
-### Step 2: Database Setup
+### Automated Setup
 
-1. Log into cPanel
-2. Go to **MySQL Databases**
-3. Create a new database (e.g., `yourusername_filetracker`)
-4. Create a new MySQL user with a strong password
-5. Add the user to the database with **ALL PRIVILEGES**
-6. Open **phpMyAdmin**
-7. Select your database
+The installer automatically configures:
+- VAPID keys for push notifications
+- Notification and email settings
+- Security and system preferences
+- Default stakeholders and departments
+- Complete system initialization
 8. Click **Import** tab
 9. Upload `sql/migration.sql`
 10. Click **Go** to execute

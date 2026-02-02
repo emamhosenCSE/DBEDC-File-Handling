@@ -7,47 +7,28 @@
 2. Upload to `/public_html/` on your Namecheap hosting via FTP
 3. Your URL will be: `https://yourdomain.com/`
 
-### Step 2: Database Setup (1 minute)
-1. Go to cPanel → MySQL Databases
-2. Create database: `youruser_filetracker`
-3. Create user with strong password
-4. Add user to database (ALL PRIVILEGES)
-5. Go to phpMyAdmin → Import → `sql/migration.sql`
+### Step 2: Run Automated Installer (3 minutes)
+1. Visit `https://yourdomain.com/install.php`
+2. Complete the 6-step wizard:
+   - Database configuration
+   - Google OAuth setup
+   - Admin email designation
+   - Branding customization
+   - Email configuration
+   - Automated system setup
 
-### Step 3: Configure (2 minutes)
-
-**Edit `includes/db.php`:**
-```php
-define('DB_NAME', 'youruser_filetracker');  // Your database name
-define('DB_USER', 'youruser_dbuser');       // Your database user
-define('DB_PASS', 'your_password');         // Your password
-define('DEV_MODE', false);                  // Set to false for production
-```
-
-**Setup Google OAuth:**
-1. Visit: https://console.cloud.google.com
-2. Create project → APIs & Services → Credentials
-3. Create OAuth 2.0 Client ID
-4. Add redirect: `https://yourdomain.com/callback.php`
-5. Copy Client ID and Secret
-
-**Edit `login.php` AND `callback.php`:**
-```php
-define('GOOGLE_CLIENT_ID', 'paste-your-client-id-here');
-define('GOOGLE_CLIENT_SECRET', 'paste-your-secret-here');
-define('GOOGLE_REDIRECT_URI', 'https://yourdomain.com/callback.php');
-```
-
-### Step 4: Set Permissions
-Via FTP or cPanel File Manager:
-```
-Right-click assets/uploads → Change Permissions → 777
-```
-
-### Step 5: Test!
+### Step 3: Admin Access
 1. Visit `https://yourdomain.com/`
-2. Click "Sign in with Google"
+2. Click "Sign in with Google" using your designated admin email
 3. You're in! 🎉
+
+### What's Automated?
+The installer automatically configures:
+- ✅ VAPID keys for push notifications
+- ✅ Notification and email settings
+- ✅ Security preferences
+- ✅ Default stakeholders and departments
+- ✅ Complete system initialization
 
 ---
 

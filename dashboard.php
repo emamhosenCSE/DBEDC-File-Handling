@@ -12,6 +12,13 @@ ensureAuthenticated();
 $user = getCurrentUser();
 $csrfToken = generateCSRFToken();
 
+// Security Headers
+header("X-Frame-Options: DENY");
+header("X-Content-Type-Options: nosniff");
+header("X-XSS-Protection: 1; mode=block");
+header("Referrer-Policy: strict-origin-when-cross-origin");
+header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self'");
+
 // Get branding settings
 try {
     $stmt = $pdo->query("SELECT setting_key, setting_value FROM settings WHERE setting_group = 'branding' AND is_public = TRUE");
@@ -20,10 +27,10 @@ try {
     $branding = [];
 }
 
-$companyName = $branding['company_name'] ?? 'DBEDC File Tracker';
+$companyName = $branding['company_name'] ?? getSystemConfig('company_name', 'File Tracker');
 $companyLogo = $branding['company_logo'] ?? null;
-$primaryColor = $branding['primary_color'] ?? '#667eea';
-$secondaryColor = $branding['secondary_color'] ?? '#764ba2';
+$primaryColor = $branding['primary_color'] ?? getSystemConfig('primary_color', '#667eea');
+$secondaryColor = $branding['secondary_color'] ?? getSystemConfig('secondary_color', '#764ba2');
 
 // Get stakeholders for forms
 try {
@@ -84,6 +91,9 @@ try {
     <link rel="stylesheet" href="assets/css/app.css?v=2.0">
 </head>
 <body>
+    <!-- Skip Link for Accessibility -->
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+
     <!-- Header -->
     <header class="header">
         <div class="container">
@@ -114,6 +124,13 @@ try {
                         <?php if ($unreadCount > 0): ?>
                             <span class="notification-badge" id="notification-badge"><?php echo $unreadCount > 99 ? '99+' : $unreadCount; ?></span>
                         <?php endif; ?>
+                    </button>
+
+                    <!-- Help Button -->
+                    <button class="btn-icon" onclick="showHelpModal()" title="Help & Shortcuts" aria-label="Help and keyboard shortcuts">
+                        <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/>
+                        </svg>
                     </button>
                     
                     <!-- User Section -->
@@ -239,6 +256,24 @@ try {
                     <span>Analytics</span>
                 </button>
                 
+                <!-- Workflow Automation (Admin/Manager only) -->
+                <?php if (in_array($user['role'], ['ADMIN', 'MANAGER'])): ?>
+                <button class="tab" data-view="workflow" onclick="switchTab('workflow')">
+                    <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd"/>
+                    </svg>
+                    <span>Workflow</span>
+                </button>
+                <?php endif; ?>
+                
+                <!-- Advanced Reports -->
+                <button class="tab" data-view="reports" onclick="switchTab('reports')">
+                    <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z" clip-rule="evenodd"/>
+                    </svg>
+                    <span>Reports</span>
+                </button>
+                
                 <!-- Settings (Admin only) -->
                 <?php if ($user['role'] === 'ADMIN'): ?>
                 <button class="tab" data-view="settings" onclick="switchTab('settings')">
@@ -260,7 +295,7 @@ try {
     </nav>
 
     <!-- Main Content Area -->
-    <main class="main-content">
+    <main id="main-content" class="main-content" role="main">
         <div class="container">
             <div id="app-content">
                 <!-- Dynamic content loaded here -->

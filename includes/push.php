@@ -19,7 +19,7 @@ function getVAPIDKeys() {
         return [
             'publicKey' => $settings['vapid_public_key'] ?? null,
             'privateKey' => $settings['vapid_private_key'] ?? null,
-            'subject' => $settings['vapid_subject'] ?? 'mailto:admin@dhakabypass.com'
+            'subject' => $settings['vapid_subject'] ?? 'mailto:' . getSystemConfig('smtp_from_email', 'admin@example.com')
         ];
     } catch (PDOException $e) {
         error_log("Failed to get VAPID keys: " . $e->getMessage());

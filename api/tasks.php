@@ -6,6 +6,10 @@
 
 require_once __DIR__ . '/../includes/auth.php';
 ensureAuthenticated();
+ensureCSRFValid();
+
+// Set security headers
+setSecurityHeaders();
 
 $method = $_SERVER['REQUEST_METHOD'];
 $user = getCurrentUser();

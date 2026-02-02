@@ -7,6 +7,7 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/permissions.php';
 ensureAuthenticated();
+ensureCSRFValid();
 
 $method = $_SERVER['REQUEST_METHOD'];
 $user = getCurrentUser();
@@ -244,13 +245,17 @@ function handleTestEmail($input) {
     }
     
     // Send test email
+    $systemConfig = getSystemConfig();
+    $companyName = $systemConfig['company_name'] ?? 'File Tracker';
+    $primaryColor = $systemConfig['primary_color'] ?? '#667eea';
+    
     $result = sendEmail(
         $testEmail,
         $user['name'],
-        'DBEDC File Tracker - Test Email',
+        $companyName . ' - Test Email',
         '<div style="font-family: Arial, sans-serif; padding: 20px;">
-            <h2 style="color: #667eea;">Test Email</h2>
-            <p>This is a test email from DBEDC File Tracker.</p>
+            <h2 style="color: ' . $primaryColor . ';">Test Email</h2>
+            <p>This is a test email from ' . $companyName . '.</p>
             <p>If you received this email, your SMTP configuration is working correctly.</p>
             <p style="color: #6b7280; font-size: 12px;">Sent at: ' . date('Y-m-d H:i:s') . '</p>
         </div>'

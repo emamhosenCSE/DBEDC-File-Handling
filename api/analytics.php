@@ -6,6 +6,7 @@
 
 require_once __DIR__ . '/../includes/auth.php';
 ensureAuthenticated();
+ensureCSRFValid();
 
 $type = $_GET['type'] ?? 'overview';
 

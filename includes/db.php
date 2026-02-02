@@ -1,19 +1,18 @@
 <?php
 /**
  * Database Connection Handler
- * 
- * UPDATE THESE CREDENTIALS FROM YOUR NAMECHEAP CPANEL:
- * - Login to cPanel
- * - Go to MySQL Databases
- * - Create database and user
- * - Assign user to database with ALL PRIVILEGES
  */
 
-// PRODUCTION CREDENTIALS (update these)
-define('DB_HOST', 'localhost');
-define('DB_NAME', 'aeos365_dbedc_filetracker');
-define('DB_USER', 'aeos365_emamhosen');
-define('DB_PASS', 'jarvisMJ@321');
+// Load database config if it exists (from installer), otherwise use defaults
+if (file_exists(__DIR__ . '/db_config.php')) {
+    require_once __DIR__ . '/db_config.php';
+} else {
+    // Default/fallback credentials
+    define('DB_HOST', 'localhost');
+    define('DB_NAME', 'file_tracker');
+    define('DB_USER', 'root');
+    define('DB_PASS', '');
+}
 
 // Development mode (set to false in production)
 define('DEV_MODE', true);
