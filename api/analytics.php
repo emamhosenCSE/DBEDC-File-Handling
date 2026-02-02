@@ -61,10 +61,10 @@ function getOverview() {
                 SUM(CASE WHEN status = 'IN_PROGRESS' THEN 1 ELSE 0 END) as in_progress,
                 SUM(CASE WHEN status = 'COMPLETED' THEN 1 ELSE 0 END) as completed
             FROM tasks
-            WHERE assigned_to = ? OR assigned_group = ?
+            WHERE assigned_to = ? OR assigned_department = ?
         ";
         $stmt = $pdo->prepare($taskQuery);
-        $stmt->execute([$user['id'], $user['department']]);
+        $stmt->execute([$user['id'], $user['department_id']]);
     } else {
         $taskQuery = "
             SELECT 

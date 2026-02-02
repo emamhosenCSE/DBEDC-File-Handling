@@ -56,9 +56,9 @@ function handleGet() {
     // View-based filtering
     if ($view === 'my') {
         // Show tasks assigned to current user or their department
-        $filters[] = "(t.assigned_to = ? OR t.assigned_group = ?)";
+        $filters[] = "(t.assigned_to = ? OR t.assigned_department = ?)";
         $params[] = $user['id'];
-        $params[] = $user['department'];
+        $params[] = $user['department_id'];
     }
     
     // Status filter

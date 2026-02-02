@@ -98,10 +98,52 @@ function handleGet() {
         }
         
         // Get total count
-        $countSql = preg_replace('/SELECT .* FROM/', 'SELECT COUNT(*) FROM', $sql);
-        $countSql = preg_replace('/LEFT JOIN users.*ON a\.user_id = u\.id/', '', $countSql);
+        $countSql = "SELECT COUNT(*) FROM activities a WHERE 1=1";
+        $countParams = [];
+        
+        // Apply permission filters to count query
+        if ($scope === 'department') {
+            $countSql .= " AND (a.user_id IN (SELECT id FROM users WHERE department_id = ?) OR a.user_id = ?)";
+            $countParams[] = $user['department_id'];
+            $countParams[] = $user['id'];
+        } elseif ($scope === 'own') {
+            $countSql .= " AND a.user_id = ?";
+            $countParams[] = $user['id'];
+        }
+        
+        // Apply filters to count query
+        if ($entityType) {
+            $countSql .= " AND a.entity_type = ?";
+            $countParams[] = $entityType;
+        }
+        
+        if ($entityId) {
+            $countSql .= " AND a.entity_id = ?";
+            $countParams[] = $entityId;
+        }
+        
+        if ($activityType) {
+            $countSql .= " AND a.activity_type = ?";
+            $countParams[] = $activityType;
+        }
+        
+        if ($userId && $user['role'] === 'ADMIN') {
+            $countSql .= " AND a.user_id = ?";
+            $countParams[] = $userId;
+        }
+        
+        if ($dateFrom) {
+            $countSql .= " AND DATE(a.created_at) >= ?";
+            $countParams[] = $dateFrom;
+        }
+        
+        if ($dateTo) {
+            $countSql .= " AND DATE(a.created_at) <= ?";
+            $countParams[] = $dateTo;
+        }
+        
         $stmt = $pdo->prepare($countSql);
-        $stmt->execute($params);
+        $stmt->execute($countParams);
         $total = (int)$stmt->fetchColumn();
         
         // Get activities
