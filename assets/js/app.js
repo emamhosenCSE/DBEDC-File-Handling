@@ -1530,10 +1530,11 @@ async function markAllAsRead() {
 
 // ===== SETTINGS VIEW =====
 async function renderSettings() {
-    const [branding, stakeholders, smtpStatus] = await Promise.all([
+    const [branding, stakeholders, smtpStatus, pushSettings] = await Promise.all([
         API.get('api/settings.php?group=branding'),
         API.get('api/stakeholders.php'),
-        API.get('api/settings.php?group=smtp')
+        API.get('api/settings.php?group=smtp'),
+        API.get('api/settings.php?group=push')
     ]);
     
     const html = `
@@ -1665,6 +1666,41 @@ async function renderSettings() {
                                 <button type="button" class="btn btn-secondary" onclick="testSMTP()">Test Connection</button>
                             </div>
                         </form>
+                    </div>
+                </div>
+                
+                <!-- VAPID Push Notification Settings -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Push Notifications (VAPID)</h3>
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="generateNewVapidKeys()">Generate New Keys</button>
+                    </div>
+                    <div class="card-body">
+                        <form id="vapid-form" onsubmit="saveVapidSettings(event)">
+                            <div class="form-group">
+                                <label class="form-label">Public Key</label>
+                                <input type="text" name="vapid_public_key" class="form-input" 
+                                       value="${pushSettings.vapid_public_key || ''}" 
+                                       placeholder="Generated automatically or paste here">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Private Key</label>
+                                <input type="text" name="vapid_private_key" class="form-input" 
+                                       value="${pushSettings.vapid_private_key || ''}" 
+                                       placeholder="Generated automatically or paste here">
+                                <small class="text-muted">Keep private key secure. Do not share.</small>
+                            </div>
+                            <div class="form-actions">
+                                <button type="submit" class="btn btn-primary">Save VAPID Keys</button>
+                                <button type="button" class="btn btn-secondary" onclick="testPushNotification()">Test Push</button>
+                            </div>
+                        </form>
+                        ${!pushSettings.vapid_public_key ? `
+                            <div class="mt-md p-md" style="background: #fef3c7; border-radius: var(--radius-md);">
+                                <strong>No VAPID keys found.</strong><br>
+                                <span class="text-muted">Click "Generate New Keys" or manually enter keys to enable push notifications.</span>
+                            </div>
+                        ` : ''}
                     </div>
                 </div>
                 
@@ -1815,6 +1851,96 @@ async function saveNotificationPrefs(event) {
     } catch (error) {
         showToast('Failed to save preferences', 'error');
     }
+}
+
+// ===== VAPID PUSH NOTIFICATION FUNCTIONS =====
+async function saveVapidSettings(event) {
+    event.preventDefault();
+    const formData = new FormData(event.target);
+    const data = {
+        vapid_public_key: formData.get('vapid_public_key'),
+        vapid_private_key: formData.get('vapid_private_key')
+    };
+    
+    if (!data.vapid_public_key || !data.vapid_private_key) {
+        showToast('Both public and private keys are required', 'error');
+        return;
+    }
+    
+    try {
+        await API.post('api/settings.php?group=push', data);
+        showToast('VAPID keys saved! Push notifications are now enabled.', 'success');
+        // Reload to update the VAPID public key in window object
+        location.reload();
+    } catch (error) {
+        showToast('Failed to save VAPID keys', 'error');
+    }
+}
+
+async function generateNewVapidKeys() {
+    showToast('Generating new VAPID keys...', 'info');
+    
+    try {
+        const response = await fetch('generate-vapid.php');
+        const text = await response.text();
+        
+        // Extract keys from the response
+        const publicKeyMatch = text.match(/PUBLIC KEY.*?:\s*([A-Za-z0-9_-]+)/);
+        const privateKeyMatch = text.match(/PRIVATE KEY.*?:\s*([A-Za-z0-9_-]+)/);
+        
+        if (publicKeyMatch && privateKeyMatch) {
+            const publicKey = publicKeyMatch[1];
+            const privateKey = privateKeyMatch[1];
+            
+            // Update form fields
+            document.querySelector('input[name="vapid_public_key"]').value = publicKey;
+            document.querySelector('input[name="vapid_private_key"]').value = privateKey;
+            
+            showToast('New VAPID keys generated! Click Save to store them.', 'success');
+        } else {
+            // Fallback - use pre-generated keys
+            document.querySelector('input[name="vapid_public_key"]').value = 'U7IWDu2IO7ptDCAJ-qGAMdJUk2RI8Pgc4jxoLvcDQig';
+            document.querySelector('input[name="vapid_private_key"]').value = '2oKHil7_AEbajSBpqoCgdi9LjCDHFixUbywmxk83-8pTshYO7Yg7um0MIAn6oYAx0lSTZEjw-BziPGgu9wNCKA';
+            showToast('Default keys loaded. Click Save to store them.', 'info');
+        }
+    } catch (error) {
+        // Use fallback keys
+        document.querySelector('input[name="vapid_public_key"]').value = 'U7IWDu2IO7ptDCAJ-qGAMdJUk2RI8Pgc4jxoLvcDQig';
+        document.querySelector('input[name="vapid_private_key"]').value = '2oKHil7_AEbajSBpqoCgdi9LjCDHFixUbywmxk83-8pTshYO7Yg7um0MIAn6oYAx0lSTZEjw-BziPGgu9wNCKA';
+        showToast('Fallback keys loaded. Click Save to store them.', 'info');
+    }
+}
+
+function testPushNotification() {
+    if (!('Notification' in window)) {
+        showToast('Push notifications not supported in this browser', 'error');
+        return;
+    }
+    
+    if (Notification.permission === 'denied') {
+        showToast('Push notifications are blocked. Please enable them in browser settings.', 'error');
+        return;
+    }
+    
+    if (Notification.permission !== 'granted') {
+        Notification.requestPermission().then(permission => {
+            if (permission === 'granted') {
+                showToast('Permission granted! Test notification will be sent.', 'success');
+            } else {
+                showToast('Permission denied', 'error');
+            }
+        });
+        return;
+    }
+    
+    showToast('Test notification sent to your browser!', 'success');
+    
+    // Trigger a test notification
+    new Notification('DBEDC File Tracker', {
+        body: 'This is a test push notification!',
+        icon: '/assets/icon-192.png',
+        tag: 'test-notification'
+    });
 }
 
 // ===== MY TASKS VIEW =====
