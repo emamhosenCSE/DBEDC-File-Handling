@@ -76,6 +76,16 @@ function handleDatabaseSetup() {
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         ]);
         
+        // Save database config FIRST (before any database operations)
+        $configContent = "<?php
+define('DB_HOST', '" . addslashes($host) . "');
+define('DB_NAME', '" . addslashes($name) . "');
+define('DB_USER', '" . addslashes($user) . "');
+define('DB_PASS', '" . addslashes($pass) . "');
+";
+        
+        file_put_contents(__DIR__ . '/includes/db_config.php', $configContent);
+        
         // Check if tables already exist and offer to clear them
         $stmt = $pdo->query("SHOW TABLES LIKE 'settings'");
         if ($stmt->rowCount() > 0) {
@@ -90,16 +100,6 @@ function handleDatabaseSetup() {
                 $pdo->exec("DROP TABLE IF EXISTS `$table`");
             }
         }
-        
-        // Save database config
-        $configContent = "<?php
-define('DB_HOST', '" . addslashes($host) . "');
-define('DB_NAME', '" . addslashes($name) . "');
-define('DB_USER', '" . addslashes($user) . "');
-define('DB_PASS', '" . addslashes($pass) . "');
-";
-        
-        file_put_contents(__DIR__ . '/includes/db_config.php', $configContent);
         
         // Run migration (use cleaned version)
         $migration = file_get_contents(__DIR__ . '/sql/migration.sql');
