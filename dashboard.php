@@ -91,8 +91,7 @@ try {
     <link rel="stylesheet" href="assets/css/app.css?v=2.0">
 </head>
 <body>
-    <!-- Skip Link for Accessibility -->
-    <a href="#main-content" class="skip-link">Skip to main content</a>
+    
 
     <!-- Header -->
     <header class="header">
