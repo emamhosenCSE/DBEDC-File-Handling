@@ -1,0 +1,58 @@
+{
+  "name": "DBEDC File Tracker",
+  "short_name": "File Tracker",
+  "description": "Track and manage file handling tasks and letters",
+  "start_url": "/file-tracker/dashboard.php",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#667eea",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/file-tracker/assets/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/file-tracker/assets/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/file-tracker/assets/screenshot-1.png",
+      "sizes": "1280x720",
+      "type": "image/png"
+    }
+  ],
+  "categories": ["productivity", "business"],
+  "shortcuts": [
+    {
+      "name": "My Tasks",
+      "short_name": "Tasks",
+      "description": "View my assigned tasks",
+      "url": "/file-tracker/dashboard.php#my-tasks",
+      "icons": [
+        {
+          "src": "/file-tracker/assets/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Add Letter",
+      "short_name": "Add",
+      "description": "Add a new letter",
+      "url": "/file-tracker/dashboard.php#add-letter",
+      "icons": [
+        {
+          "src": "/file-tracker/assets/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ]
+}
