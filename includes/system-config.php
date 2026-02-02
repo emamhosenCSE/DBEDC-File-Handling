@@ -80,7 +80,7 @@ function getSystemConfig($key = null, $default = null) {
                         // Convert string values to appropriate types
                         if (is_numeric($settingValue)) {
                             $config[$configKey] = strpos($settingValue, '.') !== false ? (float)$settingValue : (int)$settingValue;
-                        } elseif (in_array(strtolower($settingValue), ['true', 'false'])) {
+                        } elseif (is_string($settingValue) && in_array(strtolower($settingValue), ['true', 'false'])) {
                             $config[$configKey] = strtolower($settingValue) === 'true';
                         } else {
                             $config[$configKey] = $settingValue;
