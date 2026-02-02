@@ -4,14 +4,23 @@
  * Handles SMTP email sending and queue management
  */
 
-require_once __DIR__ . '/db.php';
+// Only require db.php if database config exists and we're not just loading templates
+$dbRequired = file_exists(__DIR__ . '/db_config.php');
+if ($dbRequired) {
+    try {
+        require_once __DIR__ . '/db.php';
+    } catch (Exception $e) {
+        $dbRequired = false;
+    }
+}
+
 require_once __DIR__ . '/system-config.php';
 
 /**
  * Email configuration from settings
  */
 function getEmailConfig() {
-    global $pdo;
+    global $pdo, $dbRequired;
 
     $defaults = getEmailDefaults();
 
@@ -24,11 +33,15 @@ function getEmailConfig() {
         'from_email' => $defaults['from_email'],
         'from_name' => $defaults['from_name']
     ];
-    
+
+    if (!$dbRequired) {
+        return $config; // Return defaults if database not available
+    }
+
     try {
         $stmt = $pdo->query("SELECT setting_key, setting_value FROM settings WHERE setting_group = 'email'");
         $settings = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
-        
+
         if (!empty($settings['smtp_host'])) $config['host'] = $settings['smtp_host'];
         if (!empty($settings['smtp_port'])) $config['port'] = (int)$settings['smtp_port'];
         if (!empty($settings['smtp_secure'])) $config['secure'] = $settings['smtp_secure'];
@@ -47,8 +60,13 @@ function getEmailConfig() {
  * Queue an email for sending
  */
 function queueEmail($recipientEmail, $recipientName, $subject, $bodyHtml, $bodyText = null, $template = null, $templateData = null, $scheduledAt = null) {
-    global $pdo;
-    
+    global $pdo, $dbRequired;
+
+    if (!$dbRequired) {
+        error_log("Cannot queue email: database not available");
+        return false;
+    }
+
     try {
         $stmt = $pdo->prepare("
             INSERT INTO email_queue (id, recipient_email, recipient_name, subject, body_html, body_text, template, template_data, scheduled_at)
@@ -248,7 +266,12 @@ function sendViaSMTP($config, $to, $toName, $subject, $message, $headers) {
  * Process email queue (call from cron or after request)
  */
 function processEmailQueue($limit = 10) {
-    global $pdo;
+    global $pdo, $dbRequired;
+
+    if (!$dbRequired) {
+        error_log("Cannot process email queue: database not available");
+        return 0;
+    }
     
     try {
         // Get pending emails

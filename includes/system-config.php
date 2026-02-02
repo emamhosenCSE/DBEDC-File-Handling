@@ -4,7 +4,16 @@
  * Centralized configuration management for dynamic content
  */
 
-require_once __DIR__ . '/db.php';
+// Only require db.php if database config exists
+$dbAvailable = false;
+if (file_exists(__DIR__ . '/db_config.php')) {
+    try {
+        require_once __DIR__ . '/db.php';
+        $dbAvailable = true;
+    } catch (Exception $e) {
+        $dbAvailable = false;
+    }
+}
 
 /**
  * Get system configuration with fallbacks
@@ -58,28 +67,31 @@ function getSystemConfig($key = null, $default = null) {
         ];
 
         // Load from database settings
-        try {
-            global $pdo;
-            $stmt = $pdo->query("SELECT setting_key, setting_value FROM settings WHERE setting_group IN ('branding', 'email', 'workflow', 'system')");
-            $settings = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
+        global $dbAvailable;
+        if ($dbAvailable) {
+            try {
+                global $pdo;
+                $stmt = $pdo->query("SELECT setting_key, setting_value FROM settings WHERE setting_group IN ('branding', 'email', 'workflow', 'system')");
+                $settings = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
 
-            // Override defaults with database values
-            foreach ($settings as $settingKey => $settingValue) {
-                $configKey = str_replace(['branding_', 'email_', 'workflow_', 'system_'], '', $settingKey);
-                if (array_key_exists($configKey, $config)) {
-                    // Convert string values to appropriate types
-                    if (is_numeric($settingValue)) {
-                        $config[$configKey] = strpos($settingValue, '.') !== false ? (float)$settingValue : (int)$settingValue;
-                    } elseif (in_array(strtolower($settingValue), ['true', 'false'])) {
-                        $config[$configKey] = strtolower($settingValue) === 'true';
-                    } else {
-                        $config[$configKey] = $settingValue;
+                // Override defaults with database values
+                foreach ($settings as $settingKey => $settingValue) {
+                    $configKey = str_replace(['branding_', 'email_', 'workflow_', 'system_'], '', $settingKey);
+                    if (array_key_exists($configKey, $config)) {
+                        // Convert string values to appropriate types
+                        if (is_numeric($settingValue)) {
+                            $config[$configKey] = strpos($settingValue, '.') !== false ? (float)$settingValue : (int)$settingValue;
+                        } elseif (in_array(strtolower($settingValue), ['true', 'false'])) {
+                            $config[$configKey] = strtolower($settingValue) === 'true';
+                        } else {
+                            $config[$configKey] = $settingValue;
+                        }
                     }
                 }
+            } catch (Exception $e) {
+                // Use defaults if database is not available
+                error_log("Failed to load system config from database: " . $e->getMessage());
             }
-        } catch (Exception $e) {
-            // Use defaults if database is not available
-            error_log("Failed to load system config from database: " . $e->getMessage());
         }
     }
 
@@ -143,6 +155,11 @@ function getSystemLimits() {
  * Update system configuration
  */
 function updateSystemConfig($key, $value, $group = 'system') {
+    global $dbAvailable;
+    if (!$dbAvailable) {
+        return false; // Cannot update if database not available
+    }
+
     try {
         global $pdo;
 
