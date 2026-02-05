@@ -28,37 +28,38 @@ echo "<p><a href='?run=migration' style='background:#007bff;color:white;padding:
 
 echo "<hr>";
 echo "<h3>SQL Commands That Will Be Executed:</h3>";
-echo "<pre>" . htmlspecialchars(getMigrationSQL()) . "</pre>";
+echo "<pre>" . htmlspecialchars(implode(";\n", getMigrationSQL())) . ";</pre>";
 
 function getMigrationSQL() {
-    return "-- Add new columns to users table
-ALTER TABLE users
-ADD COLUMN provider ENUM('google', 'wechat', 'email') DEFAULT 'google' AFTER google_id,
-ADD COLUMN wechat_id VARCHAR(100) UNIQUE DEFAULT NULL AFTER provider,
-ADD COLUMN password_hash VARCHAR(255) DEFAULT NULL AFTER wechat_id,
-ADD COLUMN wechat_unionid VARCHAR(100) DEFAULT NULL AFTER wechat_id,
-ADD COLUMN wechat_openid VARCHAR(100) DEFAULT NULL AFTER wechat_unionid;
+    return [
+        // Add columns one by one to avoid syntax issues
+        "ALTER TABLE users ADD COLUMN provider ENUM('google', 'wechat', 'email') DEFAULT 'google' AFTER google_id",
+        "ALTER TABLE users ADD COLUMN wechat_id VARCHAR(100) UNIQUE DEFAULT NULL AFTER provider",
+        "ALTER TABLE users ADD COLUMN password_hash VARCHAR(255) DEFAULT NULL AFTER wechat_id",
+        "ALTER TABLE users ADD COLUMN wechat_unionid VARCHAR(100) DEFAULT NULL AFTER password_hash",
+        "ALTER TABLE users ADD COLUMN wechat_openid VARCHAR(100) DEFAULT NULL AFTER wechat_unionid",
 
--- Update existing users
-UPDATE users SET provider = 'google' WHERE google_id IS NOT NULL;
-ALTER TABLE users MODIFY COLUMN google_id VARCHAR(100) DEFAULT NULL;
+        // Update existing users
+        "UPDATE users SET provider = 'google' WHERE google_id IS NOT NULL",
+        "ALTER TABLE users MODIFY COLUMN google_id VARCHAR(100) DEFAULT NULL",
 
--- Add indexes
-ALTER TABLE users ADD INDEX idx_provider (provider);
-ALTER TABLE users ADD INDEX idx_wechat_id (wechat_id);
-ALTER TABLE users ADD INDEX idx_wechat_unionid (wechat_unionid);
+        // Add indexes (only if columns exist)
+        "ALTER TABLE users ADD INDEX idx_provider (provider)",
+        "ALTER TABLE users ADD INDEX idx_wechat_id (wechat_id)",
+        "ALTER TABLE users ADD INDEX idx_wechat_unionid (wechat_unionid)",
 
--- Insert settings
-INSERT INTO settings (setting_key, setting_value, setting_group, is_public) VALUES
-('wechat_app_id', '', 'auth', FALSE),
-('wechat_app_secret', '', 'auth', FALSE),
-('wechat_redirect_uri', 'https://files.dhakabypass.com/wechat_callback.php', 'auth', FALSE),
-('email_login_enabled', 'true', 'auth', TRUE),
-('password_min_length', '8', 'auth', TRUE),
-('password_require_uppercase', 'true', 'auth', TRUE),
-('password_require_numbers', 'true', 'auth', TRUE),
-('password_require_special', 'false', 'auth', TRUE)
-ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value);";
+        // Insert settings
+        "INSERT INTO settings (setting_key, setting_value, setting_group, is_public) VALUES
+        ('wechat_app_id', '', 'auth', FALSE),
+        ('wechat_app_secret', '', 'auth', FALSE),
+        ('wechat_redirect_uri', 'https://files.dhakabypass.com/wechat_callback.php', 'auth', FALSE),
+        ('email_login_enabled', 'true', 'auth', TRUE),
+        ('password_min_length', '8', 'auth', TRUE),
+        ('password_require_uppercase', 'true', 'auth', TRUE),
+        ('password_require_numbers', 'true', 'auth', TRUE),
+        ('password_require_special', 'false', 'auth', TRUE)
+        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)"
+    ];
 }
 
 function runMigration() {
@@ -73,24 +74,24 @@ function runMigration() {
 
         echo "<p class='success'>✅ Database connected successfully</p>";
 
-        // Split SQL into individual statements
-        $sql = getMigrationSQL();
-        $statements = array_filter(array_map('trim', explode(';', $sql)));
+        // Get SQL statements array
+        $statements = getMigrationSQL();
 
         $successCount = 0;
         $errors = [];
 
         foreach ($statements as $statement) {
+            $statement = trim($statement);
             if (empty($statement) || strpos($statement, '--') === 0) {
                 continue; // Skip comments and empty statements
             }
 
             try {
                 $pdo->exec($statement);
-                echo "<p class='success'>✅ Executed: " . substr($statement, 0, 50) . "...</p>";
+                echo "<p class='success'>✅ Executed: " . substr($statement, 0, 60) . "...</p>";
                 $successCount++;
             } catch (Exception $e) {
-                $errorMsg = "❌ Failed: " . substr($statement, 0, 50) . "... - " . $e->getMessage();
+                $errorMsg = "❌ Failed: " . substr($statement, 0, 60) . "... - " . $e->getMessage();
                 echo "<p class='error'>$errorMsg</p>";
                 $errors[] = $errorMsg;
             }
