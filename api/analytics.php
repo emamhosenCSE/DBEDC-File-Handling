@@ -4,6 +4,23 @@
  * Provides statistical data for dashboard
  */
 
+// Configure session for API requests
+if (session_status() === PHP_SESSION_NONE) {
+    $domain = $_SERVER['HTTP_HOST'] ?? 'files.dhakabypass.com';
+    $secure = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on';
+
+    session_set_cookie_params([
+        'lifetime' => 0,
+        'path' => '/',
+        'domain' => $domain,
+        'secure' => $secure,
+        'httponly' => true,
+        'samesite' => 'Lax'
+    ]);
+
+    session_start();
+}
+
 // CORS headers for API requests
 header('Access-Control-Allow-Origin: ' . ($_SERVER['HTTP_ORIGIN'] ?? '*'));
 header('Access-Control-Allow-Credentials: true');
