@@ -7,10 +7,14 @@
 // Configure session for API requests
 if (session_status() === PHP_SESSION_NONE) {
     $domain = $_SERVER['HTTP_HOST'] ?? 'files.dhakabypass.com';
+    // Try with leading dot for subdomain support
+    if (strpos($domain, '.') !== false && substr_count($domain, '.') >= 2) {
+        $domain = '.' . $domain;
+    }
     $secure = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on';
 
     session_set_cookie_params([
-        'lifetime' => 0,
+        'lifetime' => 3600, // 1 hour
         'path' => '/',
         'domain' => $domain,
         'secure' => $secure,
@@ -122,7 +126,7 @@ function getOverview() {
     jsonResponse([
         'tasks' => $taskStats,
         'letters' => $letterStats,
-        'avg_completion_days' => round($avgCompletion, 1)
+        'avg_completion_days' => $avgCompletion ? round($avgCompletion, 1) : '-'
     ]);
 }
 
