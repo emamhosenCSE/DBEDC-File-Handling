@@ -343,7 +343,7 @@ $wechatAuthUrl = getWeChatAuthUrl();
         <h1><?php echo htmlspecialchars($companyName); ?></h1>
         <p>Sign in to manage your documents and tasks</p>
         
-        <?php if (GOOGLE_CLIENT_ID === 'your_google_client_id' || WECHAT_APP_ID === 'your_wechat_app_id'): ?>
+        <?php if ((GOOGLE_CLIENT_ID === 'your_google_client_id' && WECHAT_APP_ID === 'your_wechat_app_id') && !EMAIL_LOGIN_ENABLED): ?>
         <div class="setup-notice">
             <strong>⚠️ Setup Required</strong>
             Please configure OAuth credentials in the settings or config files before using the system.
