@@ -11,8 +11,15 @@ if (!$pdo) {
 echo "<p>✅ Database connected</p>";
 
 // Check settings table
-$stmt = $pdo->query("SELECT setting_key, setting_value FROM settings WHERE setting_group = 'auth'");
-$settings = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
+$stmt = $pdo->query("SELECT setting_key, setting_value, setting_group FROM settings ORDER BY setting_group, setting_key");
+$allSettings = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+echo "<h2>All Settings:</h2>";
+echo "<pre>";
+foreach ($allSettings as $setting) {
+    echo "[{$setting['setting_group']}] {$setting['setting_key']} = {$setting['setting_value']}\n";
+}
+echo "</pre>";
 
 echo "<h2>Auth Settings:</h2>";
 echo "<pre>";
