@@ -1,0 +1,113 @@
+[02-Feb-2026 08:23:52 UTC] PHP Warning:  Undefined variable $pdo in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 15
+[02-Feb-2026 08:23:52 UTC] PHP Fatal error:  Uncaught Error: Call to a member function query() on null in D:\laragon\www\DBEDC-File-Handling\includes\config.php:15
+Stack trace:
+#0 D:\laragon\www\DBEDC-File-Handling\includes\auth.php(35): require_once()
+#1 D:\laragon\www\DBEDC-File-Handling\index.php(10): isSystemInstalled()
+#2 {main}
+  thrown in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 15
+[02-Feb-2026 08:24:18 UTC] PHP Warning:  Undefined variable $pdo in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 15
+[02-Feb-2026 08:24:18 UTC] PHP Fatal error:  Uncaught Error: Call to a member function query() on null in D:\laragon\www\DBEDC-File-Handling\includes\config.php:15
+Stack trace:
+#0 D:\laragon\www\DBEDC-File-Handling\includes\auth.php(35): require_once()
+#1 D:\laragon\www\DBEDC-File-Handling\index.php(10): isSystemInstalled()
+#2 {main}
+  thrown in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 15
+[02-Feb-2026 08:24:59 UTC] PHP Warning:  Undefined variable $pdo in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 15
+[02-Feb-2026 08:24:59 UTC] PHP Fatal error:  Uncaught Error: Call to a member function query() on null in D:\laragon\www\DBEDC-File-Handling\includes\config.php:15
+Stack trace:
+#0 D:\laragon\www\DBEDC-File-Handling\includes\auth.php(35): require_once()
+#1 D:\laragon\www\DBEDC-File-Handling\index.php(10): isSystemInstalled()
+#2 {main}
+  thrown in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 15
+[02-Feb-2026 08:25:12 UTC] PHP Warning:  Undefined variable $pdo in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 15
+[02-Feb-2026 08:25:12 UTC] PHP Fatal error:  Uncaught Error: Call to a member function query() on null in D:\laragon\www\DBEDC-File-Handling\includes\config.php:15
+Stack trace:
+#0 D:\laragon\www\DBEDC-File-Handling\includes\auth.php(36): require_once()
+#1 D:\laragon\www\DBEDC-File-Handling\index.php(10): isSystemInstalled()
+#2 {main}
+  thrown in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 15
+[02-Feb-2026 08:25:32 UTC] PHP Warning:  Undefined variable $pdo in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 15
+[02-Feb-2026 08:25:32 UTC] PHP Fatal error:  Uncaught Error: Call to a member function query() on null in D:\laragon\www\DBEDC-File-Handling\includes\config.php:15
+Stack trace:
+#0 D:\laragon\www\DBEDC-File-Handling\includes\auth.php(36): require_once()
+#1 D:\laragon\www\DBEDC-File-Handling\index.php(10): isSystemInstalled()
+#2 {main}
+  thrown in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 15
+[02-Feb-2026 08:25:40 UTC] PHP Warning:  Undefined variable $pdo in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 15
+[02-Feb-2026 08:25:40 UTC] PHP Warning:  Constant DB_HOST already defined in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 30
+[02-Feb-2026 08:25:40 UTC] PHP Warning:  Constant DB_NAME already defined in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 31
+[02-Feb-2026 08:25:40 UTC] PHP Warning:  Constant DB_USER already defined in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 32
+[02-Feb-2026 08:25:40 UTC] PHP Warning:  Constant DB_PASS already defined in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 33
+[02-Feb-2026 08:25:40 UTC] PHP Warning:  Undefined variable $pdo in D:\laragon\www\DBEDC-File-Handling\includes\auth.php on line 39
+[02-Feb-2026 08:25:40 UTC] PHP Fatal error:  Uncaught Error: Call to a member function query() on null in D:\laragon\www\DBEDC-File-Handling\includes\auth.php:39
+Stack trace:
+#0 D:\laragon\www\DBEDC-File-Handling\index.php(10): isSystemInstalled()
+#1 {main}
+  thrown in D:\laragon\www\DBEDC-File-Handling\includes\auth.php on line 39
+[02-Feb-2026 08:25:40 UTC] PHP Warning:  Undefined variable $pdo in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 15
+[02-Feb-2026 08:25:40 UTC] PHP Warning:  Constant DB_HOST already defined in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 30
+[02-Feb-2026 08:25:40 UTC] PHP Warning:  Constant DB_NAME already defined in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 31
+[02-Feb-2026 08:25:40 UTC] PHP Warning:  Constant DB_USER already defined in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 32
+[02-Feb-2026 08:25:40 UTC] PHP Warning:  Constant DB_PASS already defined in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 33
+[02-Feb-2026 08:25:40 UTC] PHP Warning:  Undefined variable $pdo in D:\laragon\www\DBEDC-File-Handling\includes\auth.php on line 39
+[02-Feb-2026 08:25:40 UTC] PHP Fatal error:  Uncaught Error: Call to a member function query() on null in D:\laragon\www\DBEDC-File-Handling\includes\auth.php:39
+Stack trace:
+#0 D:\laragon\www\DBEDC-File-Handling\index.php(10): isSystemInstalled()
+#1 {main}
+  thrown in D:\laragon\www\DBEDC-File-Handling\includes\auth.php on line 39
+[02-Feb-2026 08:25:54 UTC] db_config.php exists, proceeding with database check
+[02-Feb-2026 08:25:54 UTC] PHP Warning:  Undefined variable $pdo in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 15
+[02-Feb-2026 08:25:54 UTC] PHP Warning:  Constant DB_HOST already defined in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 30
+[02-Feb-2026 08:25:54 UTC] PHP Warning:  Constant DB_NAME already defined in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 31
+[02-Feb-2026 08:25:54 UTC] PHP Warning:  Constant DB_USER already defined in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 32
+[02-Feb-2026 08:25:54 UTC] PHP Warning:  Constant DB_PASS already defined in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 33
+[02-Feb-2026 08:25:54 UTC] PHP Warning:  Undefined variable $pdo in D:\laragon\www\DBEDC-File-Handling\includes\auth.php on line 40
+[02-Feb-2026 08:25:54 UTC] pdo is null, returning false
+[02-Feb-2026 08:25:58 UTC] db_config.php exists, proceeding with database check
+[02-Feb-2026 08:25:58 UTC] PHP Warning:  Undefined variable $pdo in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 15
+[02-Feb-2026 08:25:58 UTC] PHP Warning:  Constant DB_HOST already defined in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 30
+[02-Feb-2026 08:25:58 UTC] PHP Warning:  Constant DB_NAME already defined in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 31
+[02-Feb-2026 08:25:58 UTC] PHP Warning:  Constant DB_USER already defined in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 32
+[02-Feb-2026 08:25:58 UTC] PHP Warning:  Constant DB_PASS already defined in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 33
+[02-Feb-2026 08:25:58 UTC] PHP Warning:  Undefined variable $pdo in D:\laragon\www\DBEDC-File-Handling\includes\auth.php on line 40
+[02-Feb-2026 08:25:58 UTC] pdo is null, returning false
+[02-Feb-2026 08:26:00 UTC] db_config.php exists, proceeding with database check
+[02-Feb-2026 08:26:00 UTC] PHP Warning:  Undefined variable $pdo in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 15
+[02-Feb-2026 08:26:00 UTC] PHP Warning:  Constant DB_HOST already defined in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 30
+[02-Feb-2026 08:26:00 UTC] PHP Warning:  Constant DB_NAME already defined in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 31
+[02-Feb-2026 08:26:00 UTC] PHP Warning:  Constant DB_USER already defined in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 32
+[02-Feb-2026 08:26:00 UTC] PHP Warning:  Constant DB_PASS already defined in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 33
+[02-Feb-2026 08:26:00 UTC] PHP Warning:  Undefined variable $pdo in D:\laragon\www\DBEDC-File-Handling\includes\auth.php on line 40
+[02-Feb-2026 08:26:00 UTC] pdo is null, returning false
+[02-Feb-2026 08:29:03 UTC] PHP Warning:  Undefined variable $pdo in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 15
+[02-Feb-2026 08:29:03 UTC] PHP Warning:  Constant DB_HOST already defined in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 30
+[02-Feb-2026 08:29:03 UTC] PHP Warning:  Constant DB_NAME already defined in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 31
+[02-Feb-2026 08:29:03 UTC] PHP Warning:  Constant DB_USER already defined in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 32
+[02-Feb-2026 08:29:03 UTC] PHP Warning:  Constant DB_PASS already defined in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 33
+[02-Feb-2026 08:29:03 UTC] PHP Warning:  Undefined variable $pdo in D:\laragon\www\DBEDC-File-Handling\includes\auth.php on line 38
+[02-Feb-2026 08:29:08 UTC] PHP Warning:  Undefined variable $pdo in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 15
+[02-Feb-2026 08:29:08 UTC] PHP Warning:  Constant DB_HOST already defined in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 30
+[02-Feb-2026 08:29:08 UTC] PHP Warning:  Constant DB_NAME already defined in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 31
+[02-Feb-2026 08:29:08 UTC] PHP Warning:  Constant DB_USER already defined in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 32
+[02-Feb-2026 08:29:08 UTC] PHP Warning:  Constant DB_PASS already defined in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 33
+[02-Feb-2026 08:29:08 UTC] PHP Warning:  Undefined variable $pdo in D:\laragon\www\DBEDC-File-Handling\includes\auth.php on line 38
+[02-Feb-2026 08:29:23 UTC] PHP Warning:  Undefined variable $pdo in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 15
+[02-Feb-2026 08:29:23 UTC] PHP Warning:  Undefined variable $pdo in D:\laragon\www\DBEDC-File-Handling\includes\auth.php on line 38
+[02-Feb-2026 08:29:27 UTC] PHP Warning:  Undefined variable $pdo in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 15
+[02-Feb-2026 08:29:27 UTC] PHP Warning:  Undefined variable $pdo in D:\laragon\www\DBEDC-File-Handling\includes\auth.php on line 38
+[02-Feb-2026 08:29:39 UTC] PHP Warning:  Undefined variable $pdo in D:\laragon\www\DBEDC-File-Handling\includes\config.php on line 15
+[02-Feb-2026 08:29:39 UTC] PHP Warning:  Undefined variable $pdo in D:\laragon\www\DBEDC-File-Handling\includes\auth.php on line 38
+[02-Feb-2026 08:31:02 UTC] PHP Notice:  session_start(): Ignoring session_start() because a session is already active (started from D:\laragon\www\DBEDC-File-Handling\includes\auth.php on line 11) in D:\laragon\www\DBEDC-File-Handling\login.php on line 17
+[02-Feb-2026 08:31:02 UTC] PHP Fatal error:  Uncaught Error: Call to undefined function getSystemConfig() in D:\laragon\www\DBEDC-File-Handling\login.php:30
+Stack trace:
+#0 {main}
+  thrown in D:\laragon\www\DBEDC-File-Handling\login.php on line 30
+[02-Feb-2026 08:31:25 UTC] PHP Fatal error:  Uncaught Error: Call to a member function query() on null in D:\laragon\www\DBEDC-File-Handling\includes\system-config.php:74
+Stack trace:
+#0 D:\laragon\www\DBEDC-File-Handling\login.php(34): getSystemConfig('company_name', 'File Tracker')
+#1 {main}
+  thrown in D:\laragon\www\DBEDC-File-Handling\includes\system-config.php on line 74
+[02-Feb-2026 08:31:34 UTC] PHP Fatal error:  Uncaught Error: Call to a member function query() on null in D:\laragon\www\DBEDC-File-Handling\login.php:41
+Stack trace:
+#0 {main}
+  thrown in D:\laragon\www\DBEDC-File-Handling\login.php on line 41
