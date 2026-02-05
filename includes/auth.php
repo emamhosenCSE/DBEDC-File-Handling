@@ -105,47 +105,69 @@ function isAjaxRequest() {
 }
 
 /**
- * Get or create user from Google data
+ * Get or create user from OAuth data (Google or WeChat)
  */
-function getOrCreateUser($googleData) {
+function getOrCreateUser($oauthData, $provider = 'google') {
     global $pdo;
-    
-    // Check if user exists
-    $stmt = $pdo->prepare("SELECT * FROM users WHERE google_id = ?");
-    $stmt->execute([$googleData['id']]);
+
+    $idField = $provider . '_id';
+    $idValue = $oauthData['id'];
+
+    // Check if user exists by provider ID
+    $stmt = $pdo->prepare("SELECT * FROM users WHERE {$idField} = ? AND provider = ?");
+    $stmt->execute([$idValue, $provider]);
     $user = $stmt->fetch();
-    
+
     if ($user) {
         // Update existing user
-        $stmt = $pdo->prepare("
-            UPDATE users 
-            SET name = ?, email = ?, avatar_url = ?, updated_at = CURRENT_TIMESTAMP 
-            WHERE google_id = ?
-        ");
-        $stmt->execute([
-            $googleData['name'],
-            $googleData['email'],
-            $googleData['picture'] ?? null,
-            $googleData['id']
-        ]);
-        
+        $updateFields = [
+            'name' => $oauthData['name'] ?? $oauthData['nickname'] ?? '',
+            'email' => $oauthData['email'] ?? '',
+            'updated_at' => date('Y-m-d H:i:s')
+        ];
+
+        // Add avatar for Google, headimgurl for WeChat
+        if ($provider === 'google' && isset($oauthData['picture'])) {
+            $updateFields['avatar_url'] = $oauthData['picture'];
+        } elseif ($provider === 'wechat' && isset($oauthData['headimgurl'])) {
+            $updateFields['avatar_url'] = $oauthData['headimgurl'];
+        }
+
+        // WeChat specific fields
+        if ($provider === 'wechat') {
+            if (isset($oauthData['unionid'])) {
+                $updateFields['wechat_unionid'] = $oauthData['unionid'];
+            }
+            if (isset($oauthData['openid'])) {
+                $updateFields['wechat_openid'] = $oauthData['openid'];
+            }
+        }
+
+        $setClause = implode(', ', array_map(fn($k) => "$k = ?", array_keys($updateFields)));
+        $values = array_values($updateFields);
+
+        $stmt = $pdo->prepare("UPDATE users SET {$setClause} WHERE {$idField} = ? AND provider = ?");
+        $values[] = $idValue;
+        $values[] = $provider;
+        $stmt->execute($values);
+
         return $user['id'];
     } else {
         // Check if this should be an admin user
         $isAdmin = false;
         $role = 'MEMBER';
-        
+
         try {
             // Check if this email is designated as admin
             $stmt = $pdo->prepare("SELECT setting_value FROM settings WHERE setting_key = 'admin_email'");
             $stmt->execute();
             $adminEmail = $stmt->fetchColumn();
-            
-            if ($adminEmail && $googleData['email'] === $adminEmail) {
+
+            if ($adminEmail && $oauthData['email'] === $adminEmail) {
                 $isAdmin = true;
                 $role = 'ADMIN';
             }
-            
+
             // If no users exist yet, make this person admin
             $stmt = $pdo->query("SELECT COUNT(*) FROM users");
             $userCount = $stmt->fetchColumn();
@@ -156,43 +178,224 @@ function getOrCreateUser($googleData) {
         } catch (Exception $e) {
             // If settings table doesn't exist yet, continue
         }
-        
+
         // Create new user
         $userId = generateULID();
-        $stmt = $pdo->prepare("
-            INSERT INTO users (id, google_id, email, name, avatar_url, role) 
-            VALUES (?, ?, ?, ?, ?, ?)
-        ");
-        $stmt->execute([
-            $userId,
-            $googleData['id'],
-            $googleData['email'],
-            $googleData['name'],
-            $googleData['picture'] ?? null,
-            $role
-        ]);
-        
+        $insertData = [
+            'id' => $userId,
+            'provider' => $provider,
+            'email' => $oauthData['email'] ?? '',
+            'name' => $oauthData['name'] ?? $oauthData['nickname'] ?? '',
+            'role' => $role,
+            $idField => $idValue
+        ];
+
+        // Add avatar for Google, headimgurl for WeChat
+        if ($provider === 'google' && isset($oauthData['picture'])) {
+            $insertData['avatar_url'] = $oauthData['picture'];
+        } elseif ($provider === 'wechat' && isset($oauthData['headimgurl'])) {
+            $insertData['avatar_url'] = $oauthData['headimgurl'];
+        }
+
+        // WeChat specific fields
+        if ($provider === 'wechat') {
+            if (isset($oauthData['unionid'])) {
+                $insertData['wechat_unionid'] = $oauthData['unionid'];
+            }
+            if (isset($oauthData['openid'])) {
+                $insertData['wechat_openid'] = $oauthData['openid'];
+            }
+        }
+
+        $columns = implode(', ', array_keys($insertData));
+        $placeholders = str_repeat('?, ', count($insertData) - 1) . '?';
+        $values = array_values($insertData);
+
+        $stmt = $pdo->prepare("INSERT INTO users ({$columns}) VALUES ({$placeholders})");
+        $stmt->execute($values);
+
         return $userId;
     }
 }
 
 /**
- * Logout user
+ * Authenticate user with email and password
  */
-function logout() {
-    $_SESSION = array();
-    
-    if (ini_get("session.use_cookies")) {
-        $params = session_get_cookie_params();
-        setcookie(session_name(), '', time() - 42000,
-            $params["path"], $params["domain"],
-            $params["secure"], $params["httponly"]
-        );
+function authenticateWithEmail($email, $password) {
+    global $pdo;
+
+    // Check if user exists with a password set (allows login for OAuth users who have set passwords)
+    $stmt = $pdo->prepare("SELECT * FROM users WHERE email = ? AND password_hash IS NOT NULL AND is_active = TRUE");
+    $stmt->execute([$email]);
+    $user = $stmt->fetch();
+
+    if (!$user || !password_verify($password, $user['password_hash'])) {
+        return false;
     }
-    
-    session_destroy();
-    header('Location: /login.php');
-    exit;
+
+    // Update last login
+    $stmt = $pdo->prepare("UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?");
+    $stmt->execute([$user['id']]);
+
+    return $user;
+}
+
+/**
+ * Create user with email and password (for future use, currently disabled)
+ */
+function createUserWithEmail($email, $password, $name) {
+    global $pdo;
+
+    // Check if email login is enabled
+    if (!EMAIL_LOGIN_ENABLED) {
+        throw new Exception('Email registration is not enabled');
+    }
+
+    // Validate password
+    validatePassword($password);
+
+    // Check if email already exists
+    $stmt = $pdo->prepare("SELECT id FROM users WHERE email = ?");
+    $stmt->execute([$email]);
+    if ($stmt->fetch()) {
+        throw new Exception('Email already registered');
+    }
+
+    // Create new user
+    $userId = generateULID();
+    $passwordHash = password_hash($password, PASSWORD_DEFAULT);
+
+    $stmt = $pdo->prepare("
+        INSERT INTO users (id, provider, email, name, password_hash, role)
+        VALUES (?, 'email', ?, ?, ?, 'MEMBER')
+    ");
+    $stmt->execute([$userId, $email, $name, $passwordHash]);
+
+    return $userId;
+}
+
+/**
+ * Validate password strength
+ */
+function validatePassword($password) {
+    $errors = [];
+
+    if (strlen($password) < PASSWORD_MIN_LENGTH) {
+        $errors[] = "Password must be at least " . PASSWORD_MIN_LENGTH . " characters long";
+    }
+
+    if (PASSWORD_REQUIRE_UPPERCASE && !preg_match('/[A-Z]/', $password)) {
+        $errors[] = "Password must contain at least one uppercase letter";
+    }
+
+    if (PASSWORD_REQUIRE_NUMBERS && !preg_match('/[0-9]/', $password)) {
+        $errors[] = "Password must contain at least one number";
+    }
+
+    if (PASSWORD_REQUIRE_SPECIAL && !preg_match('/[!@#$%^&*()_+\-=\[\]{};\':"\\|,.<>\/?]/', $password)) {
+        $errors[] = "Password must contain at least one special character";
+    }
+
+    if (!empty($errors)) {
+        throw new Exception(implode(', ', $errors));
+    }
+}
+
+/**
+ * Get WeChat OAuth URL
+ */
+function getWeChatAuthUrl() {
+    $state = bin2hex(random_bytes(16));
+    $_SESSION['wechat_oauth_state'] = $state;
+
+    $params = [
+        'appid' => WECHAT_APP_ID,
+        'redirect_uri' => urlencode(WECHAT_REDIRECT_URI),
+        'response_type' => 'code',
+        'scope' => 'snsapi_login',
+        'state' => $state
+    ];
+
+    return 'https://open.weixin.qq.com/connect/qrconnect?' . http_build_query($params) . '#wechat_redirect';
+}
+
+/**
+ * Get WeChat user info from authorization code
+ */
+function getWeChatUserInfo($authCode) {
+    // Step 1: Exchange code for access token
+    $tokenUrl = 'https://api.weixin.qq.com/sns/oauth2/access_token';
+    $tokenParams = [
+        'appid' => WECHAT_APP_ID,
+        'secret' => WECHAT_APP_SECRET,
+        'code' => $authCode,
+        'grant_type' => 'authorization_code'
+    ];
+
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $tokenUrl . '?' . http_build_query($tokenParams));
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+
+    $tokenResponse = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($httpCode !== 200) {
+        throw new Exception('Failed to get WeChat access token');
+    }
+
+    $tokenData = json_decode($tokenResponse, true);
+
+    if (isset($tokenData['errcode'])) {
+        throw new Exception('WeChat OAuth error: ' . $tokenData['errmsg']);
+    }
+
+    $accessToken = $tokenData['access_token'];
+    $openId = $tokenData['openid'];
+    $unionId = $tokenData['unionid'] ?? null;
+
+    // Step 2: Get user info
+    $userUrl = 'https://api.weixin.qq.com/sns/userinfo';
+    $userParams = [
+        'access_token' => $accessToken,
+        'openid' => $openId,
+        'lang' => 'zh_CN'
+    ];
+
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $userUrl . '?' . http_build_query($userParams));
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+
+    $userResponse = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($httpCode !== 200) {
+        throw new Exception('Failed to get WeChat user info');
+    }
+
+    $userData = json_decode($userResponse, true);
+
+    if (isset($userData['errcode'])) {
+        throw new Exception('WeChat user info error: ' . $userData['errmsg']);
+    }
+
+    // Return normalized user data
+    return [
+        'id' => $openId,
+        'unionid' => $unionId,
+        'openid' => $openId,
+        'name' => $userData['nickname'] ?? '',
+        'nickname' => $userData['nickname'] ?? '',
+        'headimgurl' => $userData['headimgurl'] ?? '',
+        'sex' => $userData['sex'] ?? 0,
+        'province' => $userData['province'] ?? '',
+        'city' => $userData['city'] ?? '',
+        'country' => $userData['country'] ?? ''
+        // Note: WeChat doesn't provide email, so we'll use a placeholder
+    ];
 }
 
 /**
