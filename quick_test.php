@@ -71,20 +71,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($email) || empty($password)) {
         echo "<p class='error'>❌ Email and password are required</p>";
     } else {
-        // Test authentication
-        $stmt = $pdo->prepare("SELECT * FROM users WHERE email = ? AND password_hash IS NOT NULL AND is_active = TRUE");
+        // First, check if user exists
+        $stmt = $pdo->prepare("SELECT * FROM users WHERE email = ? AND is_active = TRUE");
         $stmt->execute([$email]);
         $user = $stmt->fetch();
 
         if (!$user) {
-            echo "<p class='error'>❌ User not found or no password set</p>";
-        } elseif (!password_verify($password, $user['password_hash'])) {
-            echo "<p class='error'>❌ Invalid password</p>";
-        } else {
-            echo "<p class='success'>✅ Login successful!</p>";
-            echo "<p><strong>User:</strong> {$user['name']} ({$user['email']})</p>";
+            echo "<p class='error'>❌ User not found in database</p>";
+        } elseif (empty($user['password_hash'])) {
+            // User exists but has no password - set one
+            $passwordHash = password_hash($password, PASSWORD_DEFAULT);
+            $updateStmt = $pdo->prepare("UPDATE users SET password_hash = ? WHERE id = ?");
+            $updateStmt->execute([$passwordHash, $user['id']]);
+
+            echo "<p class='success'>✅ Password set successfully for user: {$user['name']} ({$user['email']})</p>";
             echo "<p><strong>Provider:</strong> {$user['provider']}</p>";
-            echo "<p><strong>Role:</strong> {$user['role']}</p>";
+            echo "<p>You can now test email login with this user.</p>";
+        } else {
+            // User has password - test login
+            if (password_verify($password, $user['password_hash'])) {
+                echo "<p class='success'>✅ Login successful!</p>";
+                echo "<p><strong>User:</strong> {$user['name']} ({$user['email']})</p>";
+                echo "<p><strong>Provider:</strong> {$user['provider']}</p>";
+            } else {
+                echo "<p class='error'>❌ Invalid password</p>";
+            }
         }
     }
 }
