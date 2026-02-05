@@ -4,7 +4,16 @@
  * Handles email login and related auth operations
  */
 
-require_once __DIR__ . '/../includes/api-bootstrap.php';
+require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/permissions.php';
+
+// Ensure system is installed before any API access
+ensureSystemInstalled();
+
+// Start session for login operations
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
 $method = $_SERVER['REQUEST_METHOD'];
 
