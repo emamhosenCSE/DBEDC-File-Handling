@@ -7,10 +7,7 @@
 // Configure session for API requests
 if (session_status() === PHP_SESSION_NONE) {
     $domain = $_SERVER['HTTP_HOST'] ?? 'files.dhakabypass.com';
-    // Try with leading dot for subdomain support
-    if (strpos($domain, '.') !== false && substr_count($domain, '.') >= 2) {
-        $domain = '.' . $domain;
-    }
+    // Use the exact domain from HTTP_HOST
     $secure = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on';
 
     session_set_cookie_params([
