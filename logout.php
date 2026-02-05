@@ -4,6 +4,10 @@
  * Destroys session and redirects to login
  */
 
+// Initialize database-based sessions
+require_once __DIR__ . '/includes/session_handler.php';
+initDatabaseSessions();
+
 session_start();
 require_once __DIR__ . '/includes/auth.php';
 

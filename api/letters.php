@@ -4,7 +4,11 @@
  * Handles CRUD operations for letters with bulk support
  */
 
-// Start session with minimal configuration
+// Initialize database-based sessions
+require_once __DIR__ . '/../includes/session_handler.php';
+initDatabaseSessions();
+
+// Start session
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }

@@ -4,6 +4,10 @@
  * Processes the authorization code and creates/updates user session
  */
 
+// Initialize database-based sessions
+require_once __DIR__ . '/includes/session_handler.php';
+initDatabaseSessions();
+
 session_start();
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/auth.php';
