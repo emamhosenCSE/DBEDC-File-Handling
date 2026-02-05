@@ -6,8 +6,21 @@
 
 require_once __DIR__ . '/db.php';
 
-// Start session if not already started
+// Configure session cookies for proper cross-request persistence
 if (session_status() === PHP_SESSION_NONE) {
+    // Set session cookie parameters for proper domain handling
+    $domain = $_SERVER['HTTP_HOST'] ?? 'files.dhakabypass.com';
+    $secure = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on';
+    
+    session_set_cookie_params([
+        'lifetime' => 0, // Session cookie
+        'path' => '/',
+        'domain' => $domain,
+        'secure' => $secure,
+        'httponly' => true,
+        'samesite' => 'Lax'
+    ]);
+    
     session_start();
 }
 

@@ -14,11 +14,6 @@
 require_once __DIR__ . '/includes/auth.php';
 ensureSystemInstalled();
 
-// Start session if not already started
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-
 // Cache Control Headers - Disable all caching for login page
 header("Cache-Control: no-cache, no-store, must-revalidate");
 header("Pragma: no-cache");

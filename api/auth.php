@@ -10,11 +10,6 @@ require_once __DIR__ . '/../includes/permissions.php';
 // Ensure system is installed before any API access
 ensureSystemInstalled();
 
-// Start session for login operations
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-
 $method = $_SERVER['REQUEST_METHOD'];
 
 switch ($method) {
