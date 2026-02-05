@@ -6,18 +6,13 @@
 
 // Configure session for API requests
 if (session_status() === PHP_SESSION_NONE) {
-    $domain = $_SERVER['HTTP_HOST'] ?? 'files.dhakabypass.com';
-    // Use the exact domain from HTTP_HOST
-    $secure = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on';
-
-    session_set_cookie_params([
-        'lifetime' => 3600, // 1 hour
-        'path' => '/',
-        'domain' => $domain,
-        'secure' => $secure,
-        'httponly' => true,
-        'samesite' => 'Lax'
-    ]);
+    // Simple session configuration
+    ini_set('session.cookie_lifetime', 3600);
+    ini_set('session.cookie_path', '/');
+    ini_set('session.cookie_domain', '');
+    ini_set('session.cookie_secure', isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on');
+    ini_set('session.cookie_httponly', true);
+    ini_set('session.cookie_samesite', 'Lax');
 
     session_start();
 }
