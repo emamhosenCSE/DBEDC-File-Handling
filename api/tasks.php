@@ -4,16 +4,8 @@
  * Handles CRUD operations for tasks
  */
 
-// Configure session for API requests
+// Start session with minimal configuration
 if (session_status() === PHP_SESSION_NONE) {
-    // Simple session configuration
-    ini_set('session.cookie_lifetime', 3600);
-    ini_set('session.cookie_path', '/');
-    ini_set('session.cookie_domain', '');
-    ini_set('session.cookie_secure', isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on');
-    ini_set('session.cookie_httponly', true);
-    ini_set('session.cookie_samesite', 'Lax');
-
     session_start();
 }
 

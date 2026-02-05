@@ -5,16 +5,8 @@
  * Enhanced with Letters, Departments, Users, Settings, Notifications tabs
  */
 
-// Configure session for proper persistence
+// Start session with minimal configuration
 if (session_status() === PHP_SESSION_NONE) {
-    // Simple session configuration
-    ini_set('session.cookie_lifetime', 3600);
-    ini_set('session.cookie_path', '/');
-    ini_set('session.cookie_domain', '');
-    ini_set('session.cookie_secure', isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on');
-    ini_set('session.cookie_httponly', true);
-    ini_set('session.cookie_samesite', 'Lax');
-
     session_start();
 }
 
