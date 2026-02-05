@@ -138,10 +138,10 @@ function getStatusDistribution() {
         $stmt = $pdo->prepare("
             SELECT status, COUNT(*) as count
             FROM tasks
-            WHERE assigned_to = ? OR assigned_group = ?
+            WHERE assigned_to = ? OR assigned_department = ?
             GROUP BY status
         ");
-        $stmt->execute([$user['id'], $user['department']]);
+        $stmt->execute([$user['id'], $user['department_id']]);
     } else {
         $stmt = $pdo->query("
             SELECT status, COUNT(*) as count

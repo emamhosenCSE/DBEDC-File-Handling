@@ -237,7 +237,7 @@ function handlePost() {
     try {
         $taskId = generateULID();
         $stmt = $pdo->prepare("
-            INSERT INTO tasks (id, letter_id, title, assigned_to, assigned_group, status, notes, created_by)
+            INSERT INTO tasks (id, letter_id, title, assigned_to, assigned_department, status, notes, created_by)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ");
         
@@ -246,7 +246,7 @@ function handlePost() {
             $data['letter_id'],
             $data['title'],
             $data['assigned_to'] ?? null,
-            $data['assigned_group'] ?? null,
+            $data['assigned_department'] ?? null,
             $data['status'] ?? 'PENDING',
             $data['notes'] ?? null,
             $user['id']
@@ -295,7 +295,7 @@ function handleUpdate() {
     $updates = [];
     $params = [];
     
-    $allowedFields = ['title', 'assigned_to', 'assigned_group', 'status', 'notes'];
+    $allowedFields = ['title', 'assigned_to', 'assigned_department', 'status', 'notes'];
     foreach ($allowedFields as $field) {
         if (isset($data[$field])) {
             $updates[] = "$field = ?";
