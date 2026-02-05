@@ -12,4 +12,10 @@ header("Cache-Control: no-cache, no-store, must-revalidate");
 header("Pragma: no-cache");
 header("Expires: 0");
 
-logout();
+// Destroy session
+$_SESSION = array();
+session_destroy();
+
+// Redirect to login page
+header('Location: login.php');
+exit;
